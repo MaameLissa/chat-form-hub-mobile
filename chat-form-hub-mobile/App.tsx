@@ -45,10 +45,21 @@ export default function App() {
               component={HomeScreen} 
               options={{ headerShown: false }}
             />
-            <Stack.Screen 
+                        <Stack.Screen 
               name="Form" 
               component={FormScreen} 
-              options={{ title: 'Fill Form' }}
+              options={{ 
+                title: 'Fill Form',
+                headerStyle: {
+                  backgroundColor: '#25d366',
+                },
+                headerTintColor: '#fff',
+                headerTitleStyle: {
+                  fontWeight: '600',
+                  fontSize: 18,
+                  color: '#fff',
+                },
+              }}
             />
             <Stack.Screen 
               name="SubmittedForms" 

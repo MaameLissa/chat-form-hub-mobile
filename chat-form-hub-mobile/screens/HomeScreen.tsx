@@ -53,7 +53,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         {/* Header with Logo */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Ionicons name="chatbubble" size={40} color="white" />
+            <Ionicons name="logo-whatsapp" size={48} color="white" />
           </View>
           <Text style={styles.title}>WhatsApp Business Form</Text>
           <Text style={styles.subtitle}>Choose a form to get started</Text>
