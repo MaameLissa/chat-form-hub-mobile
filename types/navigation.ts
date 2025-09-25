@@ -10,7 +10,7 @@ export type RootStackParamList = {
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'file';
+  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'file' | 'address';
   required: boolean;
   placeholder?: string;
   options?: string[];

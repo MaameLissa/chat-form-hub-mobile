@@ -9,6 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, FormField } from '../types/navigation';
 import LocationPicker from '../components/LocationPicker';
+import { getFormConfig } from '../components/forms';
 
 type FormScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Form'>;
 type FormScreenRouteProp = RouteProp<RootStackParamList, 'Form'>;
@@ -54,43 +55,11 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   ]);
 
-  // Form templates for customer details matching the design
-  const getFormFields = (templateId: string) => {
-    const templates = {
-      'customer-details': [
-        { id: 'name', label: 'Full Name', type: 'text' as const, required: true, placeholder: 'Enter your full name' },
-        { id: 'phone', label: 'Phone Number', type: 'phone' as const, required: true, placeholder: '+233 045 677 898' },
-        { id: 'items', label: 'Item(s) to Order', type: 'textarea' as const, required: true, placeholder: 'List the items you want to order...' },
-        { id: 'delivery_address', label: 'Delivery Address', type: 'address' as const, required: true, placeholder: 'Full delivery address' },
-        { id: 'additional_instructions', label: 'Additional Instructions', type: 'textarea' as const, required: false, placeholder: 'Any additional requirement or notes...' },
-        { id: 'product_images', label: 'Product Images/References', type: 'file' as const, required: false, placeholder: 'Click to upload file' }
-      ],
-      'service-booking': [
-        { id: 'name', label: 'Full Name', type: 'text' as const, required: true, placeholder: 'Enter your full name' },
-        { id: 'phone', label: 'Phone Number', type: 'phone' as const, required: true, placeholder: '+1 (555) 123-4567' },
-        { id: 'service_type', label: 'Service Type', type: 'select' as const, required: true, options: ['Installation', 'Repair', 'Maintenance', 'Consultation'] },
-        { id: 'preferred_date', label: 'Preferred Date', type: 'text' as const, required: true, placeholder: 'MM/DD/YYYY' },
-        { id: 'description', label: 'Service Description', type: 'textarea' as const, required: true, placeholder: 'Describe the service you need...' }
-      ],
-      'feedback': [
-        { id: 'name', label: 'Your Name', type: 'text' as const, required: true, placeholder: 'Enter your name' },
-        { id: 'email', label: 'Email Address', type: 'email' as const, required: true, placeholder: 'your@email.com' },
-        { id: 'rating', label: 'Rating', type: 'select' as const, required: true, options: ['Excellent', 'Good', 'Average', 'Poor'] },
-        { id: 'feedback', label: 'Your Feedback', type: 'textarea' as const, required: true, placeholder: 'Tell us about your experience...' },
-        { id: 'suggestions', label: 'Suggestions', type: 'textarea' as const, required: false, placeholder: 'Any suggestions for improvement...' }
-      ],
-      'contact-form': [
-        { id: 'name', label: 'Full Name', type: 'text' as const, required: true, placeholder: 'Enter your full name' },
-        { id: 'phone', label: 'Phone Number', type: 'phone' as const, required: true, placeholder: '+1 (555) 123-4567' },
-        { id: 'email', label: 'Email Address', type: 'email' as const, required: true, placeholder: 'your@email.com' },
-        { id: 'subject', label: 'Subject', type: 'text' as const, required: true, placeholder: 'What is this about?' },
-        { id: 'message', label: 'Message', type: 'textarea' as const, required: true, placeholder: 'Your message...' }
-      ]
-    };
-    return templates[templateId as keyof typeof templates] || [];
-  };
-
-  const fields = getFormFields(templateId);
+  // Get form configuration from separate files
+  const formConfig = getFormConfig(templateId);
+  const fields = formConfig?.fields || [];
+  const formTitle = formConfig?.title || templateName;
+  const formSubtitle = formConfig?.subtitle || 'Complete the form below';
 
   const handleInputChange = (fieldId: string, value: string) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
@@ -343,13 +312,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>{templateName}</Text>
-          <Text style={styles.subtitle}>
-            {templateId === 'service-booking' ? 'Schedule Appointments' : 
-             templateId === 'feedback' ? 'Share Your Experience' :
-             templateId === 'contact-form' ? 'Get In Touch' :
-             'Complete customer and order information'}
-          </Text>
+          <Text style={styles.title}>{formTitle}</Text>
+          <Text style={styles.subtitle}>{formSubtitle}</Text>
           
           {/* Saved Templates Section */}
           <View style={styles.savedTemplatesSection}>
