@@ -21,7 +21,7 @@ interface Props {
 }
 
 const FormScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { templateId, templateName } = route.params;
+  const { templateId, templateName, customConfig } = route.params;
   const { addSubmittedForm } = useFormContext();
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, any>>({});
@@ -36,6 +36,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState('');
   const [showSubmitSuccessModal, setShowSubmitSuccessModal] = useState(false);
+  const [showCustomFormNameModal, setShowCustomFormNameModal] = useState(false);
+  const [customFormName, setCustomFormName] = useState('');
   const [savedTemplates, setSavedTemplates] = useState(() => {
     // Service Booking templates
     if (templateId === 'service-booking') {
@@ -101,18 +103,37 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     return [];
   });
 
-  // Get form configuration from separate files
-  const formConfig = getFormConfig(templateId);
+  // Get form configuration from separate files or use custom config
+  const formConfig = customConfig || getFormConfig(templateId);
   const fields = formConfig?.fields || [];
   const formTitle = formConfig?.title || templateName;
   const formSubtitle = formConfig?.subtitle || 'Complete the form below';
+
+  // Debug logging
+  console.log('=== FormScreen Debug Info ===');
+  console.log('Template ID:', templateId);
+  console.log('Template Name:', templateName);
+  console.log('Custom Config exists:', !!customConfig);
+  console.log('Form Config:', formConfig);
+  console.log('Fields array length:', fields.length);
+  console.log('Fields:', fields);
+  console.log('Form Title:', formTitle);
+  console.log('Form Subtitle:', formSubtitle);
+  console.log('=============================');
 
   const handleInputChange = (fieldId: string, value: string) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
   };
 
+  const [currentAddressFieldId, setCurrentAddressFieldId] = useState<string>('');
+
   const handleLocationSelect = (address: string, coordinates: { latitude: number; longitude: number }) => {
-    setFormData(prev => ({ ...prev, delivery_address: address }));
+    if (currentAddressFieldId) {
+      setFormData(prev => ({ ...prev, [currentAddressFieldId]: address }));
+    } else {
+      // Fallback to legacy field name
+      setFormData(prev => ({ ...prev, delivery_address: address }));
+    }
     setSelectedCoordinates(coordinates);
   };
 
@@ -174,8 +195,29 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleSubmit = () => {
-    if (!validateForm()) return;
+    console.log('=== SUBMIT BUTTON PRESSED ===');
+    console.log('customConfig exists:', !!customConfig);
+    console.log('templateId:', templateId);
+    console.log('showCustomFormNameModal state:', showCustomFormNameModal);
+    
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
 
+    // If it's a custom form, show naming modal first
+    if (customConfig) {
+      console.log('Showing custom form name modal');
+      setShowCustomFormNameModal(true);
+      return;
+    }
+
+    console.log('Submitting predefined form directly');
+    // For predefined forms, submit directly
+    performSubmit(templateName);
+  };
+
+  const performSubmit = (finalFormName: string) => {
     // Create uploaded files array if there are any files
     const uploadedFiles = Object.keys(fileData).length > 0 
       ? Object.keys(fileData).map(fieldId => ({
@@ -185,35 +227,58 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         }))
       : undefined;
 
-    // Determine form type based on templateId
-    let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact';
-    switch (templateId) {
-      case 'customer-details':
-        formType = 'Customer Details';
-        break;
-      case 'service-booking':
-        formType = 'Service Booking';
-        break;
-      case 'feedback':
-        formType = 'Feedback';
-        break;
-      case 'contact-form':
-        formType = 'Contact';
-        break;
-      default:
-        formType = 'Customer Details';
+    // Determine form type based on templateId and customConfig
+    let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
+    
+    console.log('Determining form type - templateId:', templateId, 'customConfig exists:', !!customConfig);
+    
+    // Priority check: if customConfig exists, it's always a custom form
+    if (customConfig) {
+      formType = 'Custom Form';
+      console.log('Using Custom Form type due to customConfig presence');
+    } else {
+      switch (templateId) {
+        case 'customer-details':
+          formType = 'Customer Details';
+          break;
+        case 'service-booking':
+          formType = 'Service Booking';
+          break;
+        case 'feedback':
+          formType = 'Feedback';
+          break;
+        case 'contact-form':
+          formType = 'Contact';
+          break;
+        case 'custom-form':
+        case 'dynamic-custom-form':
+          formType = 'Custom Form';
+          break;
+        default:
+          formType = 'Customer Details';
+      }
+      console.log('Using form type from templateId switch:', formType);
     }
 
     // Add the form to the global context
     addSubmittedForm({
       type: formType,
-      templateName,
+      templateName: finalFormName,
       data: { ...formData },
       uploadedFiles,
     });
 
     // Show success modal
     setShowSubmitSuccessModal(true);
+  };
+
+  const handleCustomFormNameConfirm = () => {
+    console.log('Custom form name confirm pressed:', customFormName);
+    const finalName = customFormName.trim() || 'Custom Form';
+    console.log('Final form name:', finalName);
+    setShowCustomFormNameModal(false);
+    performSubmit(finalName);
+    setCustomFormName('');
   };
 
   const handleSubmitAnother = () => {
@@ -268,10 +333,12 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const renderField = (field: any) => {
+    console.log('Rendering field:', field.id, 'type:', field.type, 'label:', field.label);
+    
     switch (field.type) {
       case 'textarea':
         return (
-          <View key={field.id} style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TextInput
               value={formData[field.id] || ''}
@@ -287,7 +354,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       
       case 'address':
         return (
-          <View key={field.id} style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <View style={styles.addressInputContainer}>
               <TextInput
@@ -301,7 +368,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity 
                 style={styles.locationButton}
                 onPress={() => {
-                  console.log('Location button pressed');
+                  console.log('Location button pressed for field:', field.id);
+                  setCurrentAddressFieldId(field.id);
                   setShowLocationPicker(true);
                 }}
               >
@@ -313,7 +381,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       
       case 'select':
         return (
-          <View key={field.id} style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TouchableOpacity 
               style={styles.dropdownButton}
@@ -352,7 +420,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
       case 'file':
         return (
-          <View key={field.id} style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TouchableOpacity 
               style={styles.fileUploadButton}
@@ -367,11 +435,44 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         );
       
+      case 'date':
+        return (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>{field.label}</Text>
+            <TouchableOpacity 
+              style={styles.dateButton}
+              onPress={() => setShowDatePicker(field.id)}
+            >
+              <Text style={[
+                styles.dateButtonText,
+                !formData[field.id] && styles.datePlaceholderText
+              ]}>
+                {formData[field.id] || field.placeholder}
+              </Text>
+              <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+            </TouchableOpacity>
+            {showDatePicker === field.id && (
+              <DateTimePicker
+                value={formData[field.id] ? new Date(formData[field.id]) : new Date()}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(event: any, selectedDate?: Date) => {
+                  setShowDatePicker(null);
+                  if (selectedDate) {
+                    const formattedDate = selectedDate.toLocaleDateString('en-US');
+                    handleInputChange(field.id, formattedDate);
+                  }
+                }}
+              />
+            )}
+          </View>
+        );
+
       default:
-        // Handle date fields specifically
+        // Handle date fields specifically for legacy forms
         if (field.id === 'preferred_date' || field.label.toLowerCase().includes('date')) {
           return (
-            <View key={field.id} style={styles.fieldGroup}>
+            <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>{field.label}</Text>
               <TouchableOpacity 
                 style={styles.dateButton}
@@ -405,7 +506,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         
         // Default text input for other fields
         return (
-          <View key={field.id} style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TextInput
               value={formData[field.id] || ''}
@@ -513,7 +614,11 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Form Fields */}
         <View style={styles.formContainer}>
-          {fields.map(field => renderField(field))}
+          {fields.map((field, index) => (
+            <View key={`${field.id}-${index}`}>
+              {renderField(field)}
+            </View>
+          ))}
         </View>
 
         {/* Bottom Buttons */}
@@ -587,6 +692,51 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
                 activeOpacity={0.8}
               >
                 <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Form Name Modal */}
+      <Modal
+        visible={showCustomFormNameModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          console.log('Modal close requested');
+          setShowCustomFormNameModal(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Name Your Form</Text>
+            <Text style={styles.modalSubtitle}>Give your custom form a memorable name:</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              value={customFormName}
+              onChangeText={setCustomFormName}
+              placeholder="e.g., Registration Form, Survey, etc."
+              placeholderTextColor="#9ca3af"
+              autoFocus={true}
+            />
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowCustomFormNameModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalSaveButton}
+                onPress={handleCustomFormNameConfirm}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalSaveText}>Submit Form</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -809,10 +959,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 48,
   },
   dropdownButtonText: {
     fontSize: 16,
     color: '#1f2937',
+    flex: 1,
+    marginRight: 8,
   },
   dropdownPlaceholderText: {
     color: '#9ca3af',

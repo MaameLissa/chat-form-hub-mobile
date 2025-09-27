@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 interface SubmittedForm {
   id: string;
-  type: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact';
+  type: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
   templateName: string;
   submittedAt: string;
   data: Record<string, any>;

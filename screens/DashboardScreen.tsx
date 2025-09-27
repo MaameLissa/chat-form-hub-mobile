@@ -24,7 +24,7 @@ interface Props {
 
 interface FormResponse {
   id: string;
-  type: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact';
+  type: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
   templateName: string;
   submittedAt: string;
   data: Record<string, any>;
@@ -78,6 +78,7 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       if (formTypeFilter === 'Service Booking' && response.type !== 'Service Booking') return false;
       if (formTypeFilter === 'Feedback' && response.type !== 'Feedback') return false;
       if (formTypeFilter === 'Contact' && response.type !== 'Contact') return false;
+      if (formTypeFilter === 'Custom Form' && response.type !== 'Custom Form') return false;
     }
     
     // Status filter (mock logic - all responses are "Submitted" for now)
@@ -158,6 +159,7 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     const isServiceBooking = response.type === 'Service Booking';
     const isFeedback = response.type === 'Feedback';
     const isContact = response.type === 'Contact';
+    const isCustomForm = response.type === 'Custom Form';
     
     return (
       <View key={response.id} style={styles.responseCard}>
@@ -229,7 +231,7 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           )}
 
           {/* Customer Details specific fields */}
-          {!isServiceBooking && !isFeedback && !isContact && (
+          {!isServiceBooking && !isFeedback && !isContact && !isCustomForm && (
             <>
               {response.data.items && (
                 <View style={styles.responseField}>
@@ -296,6 +298,27 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.fieldValue}>{response.data.message}</Text>
                 </View>
               )}
+            </>
+          )}
+
+          {/* Custom form specific fields - Dynamic rendering */}
+          {isCustomForm && (
+            <>
+              {Object.entries(response.data)
+                .filter(([key, value]) => value && String(value).trim() !== '')
+                .map(([key, value]) => {
+                  // Format the field label
+                  const label = key
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, l => l.toUpperCase());
+                  
+                  return (
+                    <View key={key} style={styles.responseField}>
+                      <Text style={styles.fieldLabel}>{label}:</Text>
+                      <Text style={styles.fieldValue}>{String(value)}</Text>
+                    </View>
+                  );
+                })}
             </>
           )}
 
@@ -496,6 +519,7 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
                 <View style={styles.filterOptionsRow}>
                   {renderFilterButton('Contact', formTypeFilter === 'Contact', () => setFormTypeFilter('Contact'))}
+                  {renderFilterButton('Custom Form', formTypeFilter === 'Custom Form', () => setFormTypeFilter('Custom Form'))}
                 </View>
               </View>
 

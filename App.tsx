@@ -9,6 +9,7 @@ import HomeScreen from './screens/HomeScreen';
 import FormScreen from './screens/FormScreen';
 import SubmittedFormsScreen from './screens/SubmittedFormsScreen';
 import DashboardScreen from './screens/DashboardScreen';
+import CustomFormBuilderScreen from './screens/CustomFormBuilderScreen';
 import { RootStackParamList } from './types/navigation';
 import { FormProvider } from './context/FormContext';
 
@@ -74,6 +75,22 @@ export default function App() {
                 component={DashboardScreen} 
                 options={{ 
                   title: 'Dashboard',
+                  headerStyle: {
+                    backgroundColor: '#25d366',
+                  },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                    fontSize: 18,
+                    color: '#fff',
+                  },
+                }}
+              />
+              <Stack.Screen 
+                name="CustomFormBuilder" 
+                component={CustomFormBuilderScreen} 
+                options={{ 
+                  title: 'Form Builder',
                   headerStyle: {
                     backgroundColor: '#25d366',
                   },

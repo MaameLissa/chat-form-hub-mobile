@@ -1,17 +1,25 @@
+export interface FormConfig {
+  title: string;
+  subtitle: string;
+  fields: FormField[];
+}
+
 export type RootStackParamList = {
   Home: undefined;
   Form: {
     templateId: string;
     templateName: string;
+    customConfig?: FormConfig;
   };
   SubmittedForms: undefined;
   Dashboard: undefined;
+  CustomFormBuilder: undefined;
 };
 
 export interface FormField {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'file' | 'address';
+  type: 'text' | 'email' | 'phone' | 'textarea' | 'select' | 'file' | 'address' | 'date';
   required: boolean;
   placeholder?: string;
   options?: string[];

@@ -28,6 +28,13 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       color: '#6366f1',
     },
     {
+      id: 'custom-form',
+      name: 'Custom Form',
+      description: 'Create your own form fields',
+      icon: 'create-outline',
+      color: '#8b5cf6',
+    },
+    {
       id: 'view-dashboard',
       name: 'View Dashboard',
       description: 'View form submissions',
@@ -39,6 +46,8 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const handleTemplateSelect = (templateId: string, templateName: string) => {
     if (templateId === 'view-dashboard') {
       navigation.navigate('Dashboard');
+    } else if (templateId === 'custom-form') {
+      navigation.navigate('CustomFormBuilder');
     } else {
       navigation.navigate('Form', {
         templateId,
@@ -109,11 +118,11 @@ const styles = StyleSheet.create({
     shadowColor: '#25d366',
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 2,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   title: {
     fontSize: 28,
@@ -140,11 +149,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
     borderWidth: 1,
     borderColor: '#f3f4f6',
   },
