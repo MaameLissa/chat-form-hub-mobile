@@ -5,6 +5,7 @@ export type RootStackParamList = {
     templateName: string;
   };
   SubmittedForms: undefined;
+  Dashboard: undefined;
 };
 
 export interface FormField {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, FormField } from '../types/navigation';
 import LocationPicker from '../components/LocationPicker';
 import { getFormConfig } from '../components/forms';
+import { useFormContext } from '../context/FormContext';
 
 type FormScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Form'>;
 type FormScreenRouteProp = RouteProp<RootStackParamList, 'Form'>;
@@ -21,6 +22,7 @@ interface Props {
 
 const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const { templateId, templateName } = route.params;
+  const { addSubmittedForm } = useFormContext();
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, any>>({});
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -28,32 +30,76 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showSavedTemplates, setShowSavedTemplates] = useState(false);
   const [showDropdown, setShowDropdown] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
-  const [savedTemplates] = useState([
-    {
-      id: '1',
-      name: 'Regular Customer - Clothing',
-      createdDate: '23/09/25',
-      data: {
-        name: 'John Smith',
-        phone: '+233 024 567 890',
-        items: 'T-shirts, Jeans, Sneakers',
-        delivery_address: '123 Osu Street, Accra, Ghana',
-        additional_instructions: 'Call before delivery'
-      }
-    },
-    {
-      id: '2', 
-      name: 'Express Delivery Order',
-      createdDate: '25/09/25',
-      data: {
-        name: 'Sarah Johnson',
-        phone: '+233 055 123 456',
-        items: 'Electronics, Headphones',
-        delivery_address: '456 East Legon, Accra, Ghana',
-        additional_instructions: 'Urgent delivery needed'
-      }
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastTitle, setToastTitle] = useState('');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState('');
+  const [showSubmitSuccessModal, setShowSubmitSuccessModal] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState(() => {
+    // Service Booking templates
+    if (templateId === 'service-booking') {
+      return [
+        {
+          id: '1',
+          name: 'Installation Service',
+          createdDate: '23/09/25',
+          data: {
+            name: 'Michael Brown',
+            phone: '+233 024 567 890',
+            service_type: 'Installation',
+            preferred_date: '10/15/2025',
+            description: 'Air conditioning unit installation for residential property'
+          }
+        },
+        {
+          id: '2', 
+          name: 'Monthly Maintenance',
+          createdDate: '25/09/25',
+          data: {
+            name: 'Jennifer Wilson',
+            phone: '+233 055 123 456',
+            service_type: 'Maintenance',
+            preferred_date: '10/20/2025',
+            description: 'Regular monthly maintenance check for HVAC system'
+          }
+        }
+      ];
     }
-  ]);
+    
+    // Customer Details templates (original templates)
+    if (templateId === 'customer-details') {
+      return [
+        {
+          id: '1',
+          name: 'Regular Customer - Clothing',
+          createdDate: '23/09/25',
+          data: {
+            name: 'John Smith',
+            phone: '+233 024 567 890',
+            items: 'T-shirts, Jeans, Sneakers',
+            delivery_address: '123 Osu Street, Accra, Ghana',
+            additional_instructions: 'Call before delivery'
+          }
+        },
+        {
+          id: '2', 
+          name: 'Express Delivery Order',
+          createdDate: '25/09/25',
+          data: {
+            name: 'Sarah Johnson',
+            phone: '+233 055 123 456',
+            items: 'Electronics, Headphones',
+            delivery_address: '456 East Legon, Accra, Ghana',
+            additional_instructions: 'Urgent delivery needed'
+          }
+        }
+      ];
+    }
+    
+    // Default empty array for other forms
+    return [];
+  });
 
   // Get form configuration from separate files
   const formConfig = getFormConfig(templateId);
@@ -130,24 +176,95 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleSubmit = () => {
     if (!validateForm()) return;
 
-    const whatsappMessage = generateWhatsAppMessage();
-    const whatsappUrl = `whatsapp://send?text=${whatsappMessage}`;
+    // Create uploaded files array if there are any files
+    const uploadedFiles = Object.keys(fileData).length > 0 
+      ? Object.keys(fileData).map(fieldId => ({
+          name: fileData[fieldId].name || 'Uploaded File',
+          type: fileData[fieldId].mimeType || 'file',
+          uri: fileData[fieldId].uri || ''
+        }))
+      : undefined;
 
-    Alert.alert(
-      'Send via WhatsApp',
-      'This will open WhatsApp with your form data. You can then send it to the desired contact.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Open WhatsApp', 
-          onPress: () => {
-            Linking.openURL(whatsappUrl).catch(() => {
-              Alert.alert('Error', 'Could not open WhatsApp. Please make sure WhatsApp is installed.');
-            });
-          }
-        }
-      ]
-    );
+    // Determine form type based on templateId
+    let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact';
+    switch (templateId) {
+      case 'customer-details':
+        formType = 'Customer Details';
+        break;
+      case 'service-booking':
+        formType = 'Service Booking';
+        break;
+      case 'feedback':
+        formType = 'Feedback';
+        break;
+      case 'contact-form':
+        formType = 'Contact';
+        break;
+      default:
+        formType = 'Customer Details';
+    }
+
+    // Add the form to the global context
+    addSubmittedForm({
+      type: formType,
+      templateName,
+      data: { ...formData },
+      uploadedFiles,
+    });
+
+    // Show success modal
+    setShowSubmitSuccessModal(true);
+  };
+
+  const handleSubmitAnother = () => {
+    setShowSubmitSuccessModal(false);
+    // Clear form data for new submission
+    setFormData({});
+    setFileData({});
+  };
+
+  const handleGoHome = () => {
+    setShowSubmitSuccessModal(false);
+    navigation.navigate('Home');
+  };
+
+  const handleSaveTemplate = () => {
+    // Check if form has data
+    const hasData = Object.keys(formData).some(key => formData[key]?.trim());
+    
+    if (!hasData) {
+      Alert.alert(
+        'No Data to Save',
+        'Please fill in some form fields before saving as a template.',
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
+
+    setTemplateNameInput('');
+    setShowSaveModal(true);
+  };
+
+  const handleConfirmSave = () => {
+    if (templateNameInput.trim()) {
+      const newTemplate = {
+        id: Date.now().toString(),
+        name: templateNameInput.trim(),
+        createdDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '/'),
+        data: { ...formData }
+      };
+      
+      setSavedTemplates((prev: any) => [...prev, newTemplate]);
+      
+      // Show success toast
+      setToastTitle('Template Saved!');
+      setToastMessage(`Template "${templateNameInput.trim()}" has been saved.`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      
+      setShowSaveModal(false);
+      setTemplateNameInput('');
+    }
   };
 
   const renderField = (field: any) => {
@@ -305,6 +422,16 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Custom Toast Notification */}
+      {showToast && (
+        <View style={styles.toastContainer}>
+          <View style={styles.toast}>
+            <Text style={styles.toastTitle}>{toastTitle}</Text>
+            <Text style={styles.toastMessage}>{toastMessage}</Text>
+          </View>
+        </View>
+      )}
+      
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
@@ -342,11 +469,39 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
                       onPress={() => {
                         setFormData(template.data);
                         setShowSavedTemplates(false);
+                        setToastTitle('Template Loaded!');
+                        setToastMessage(`Template "${template.name}" has been loaded.`);
+                        setShowToast(true);
+                        setTimeout(() => setShowToast(false), 3000);
                       }}
                     >
                       <Text style={styles.loadButtonText}>Load</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteButton}>
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Template',
+                          `Are you sure you want to delete "${template.name}"?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: () => {
+                                setSavedTemplates((prev: any) => 
+                                  prev.filter((t: any) => t.id !== template.id)
+                                );
+                                setToastTitle('Template Deleted!');
+                                setToastMessage(`Template "${template.name}" has been deleted.`);
+                                setShowToast(true);
+                                setTimeout(() => setShowToast(false), 3000);
+                              }
+                            }
+                          ]
+                        );
+                      }}
+                    >
                       <Ionicons name="trash-outline" size={16} color="#ef4444" />
                     </TouchableOpacity>
                   </View>
@@ -363,15 +518,27 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
         {/* Bottom Buttons */}
         <View style={styles.bottomButtons}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.saveTemplateButton}>
+          <TouchableOpacity 
+            style={styles.saveTemplateButton} 
+            onPress={handleSaveTemplate}
+            activeOpacity={0.7}
+          >
             <Text style={styles.saveTemplateButtonText}>Save Template</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+          <TouchableOpacity 
+            style={styles.submitButton} 
+            onPress={handleSubmit}
+            activeOpacity={0.8}
+          >
             <Text style={styles.submitButtonText}>Submit</Text>
           </TouchableOpacity>
         </View>
@@ -383,6 +550,87 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setShowLocationPicker(false)}
         onLocationSelect={handleLocationSelect}
       />
+
+      {/* Save Template Modal */}
+      <Modal
+        visible={showSaveModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSaveModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Save Template</Text>
+            <Text style={styles.modalSubtitle}>Enter a name for this template:</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              value={templateNameInput}
+              onChangeText={setTemplateNameInput}
+              placeholder="Template name"
+              placeholderTextColor="#9ca3af"
+              autoFocus={true}
+            />
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowSaveModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalSaveButton}
+                onPress={handleConfirmSave}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Submit Success Modal */}
+      <Modal
+        visible={showSubmitSuccessModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSubmitSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModalContainer}>
+            <View style={styles.successIcon}>
+              <Ionicons name="checkmark" size={32} color="#ffffff" />
+            </View>
+            
+            <Text style={styles.successTitle}>Form Submitted!</Text>
+            <Text style={styles.successMessage}>
+              Thank you! Your customer form has been sent successfully. You will receive a confirmation message soon.
+            </Text>
+            
+            <View style={styles.successButtons}>
+              <TouchableOpacity
+                style={styles.homeButton}
+                onPress={handleGoHome}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.homeButtonText}>Home</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.submitAnotherButton}
+                onPress={handleSubmitAnother}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.submitAnotherButtonText}>Submit Another</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -596,48 +844,65 @@ const styles = StyleSheet.create({
   },
   bottomButtons: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#f1f3f4',
   },
   backButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    borderRadius: 6,
-    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    minWidth: 80,
   },
   backButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#495057',
   },
   saveTemplateButton: {
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 6,
-    backgroundColor: '#f3f4f6',
-    flex: 1,
     justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    flex: 1,
   },
   saveTemplateButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#495057',
   },
   submitButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 10,
     backgroundColor: '#10b981',
     flex: 1,
+    shadowColor: '#10b981',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   submitButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#ffffff',
   },
   dateButton: {
@@ -658,6 +923,231 @@ const styles = StyleSheet.create({
   },
   datePlaceholderText: {
     color: '#9ca3af',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+    alignItems: 'center',
+  },
+  toast: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    minWidth: 280,
+  },
+  toastTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  toastMessage: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 24,
+    marginHorizontal: 32,
+    minWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1f2937',
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  modalSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  modalSaveText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  // Success Modal Styles
+  successModalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 40,
+    marginHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
+    maxWidth: 400,
+    width: '100%',
+  },
+  successIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#10b981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#10b981',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+    paddingHorizontal: 8,
+  },
+  successButtons: {
+    flexDirection: 'row',
+    gap: 16,
+    width: '100%',
+    marginTop: 8,
+  },
+  homeButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  homeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+  },
+  submitAnotherButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  submitAnotherButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
 

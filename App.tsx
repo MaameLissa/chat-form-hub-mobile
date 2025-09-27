@@ -8,7 +8,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
 import FormScreen from './screens/FormScreen';
 import SubmittedFormsScreen from './screens/SubmittedFormsScreen';
+import DashboardScreen from './screens/DashboardScreen';
 import { RootStackParamList } from './types/navigation';
+import { FormProvider } from './context/FormContext';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -26,49 +28,67 @@ const theme = {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <NavigationContainer>
-          <StatusBar style="auto" />
-          <Stack.Navigator
-            screenOptions={{
-              headerStyle: {
-                backgroundColor: theme.colors.primary,
-              },
-              headerTintColor: '#fff',
-              headerTitleStyle: {
-                fontWeight: 'bold',
-              },
-            }}
-          >
-            <Stack.Screen 
-              name="Home" 
-              component={HomeScreen} 
-              options={{ headerShown: false }}
-            />
-                        <Stack.Screen 
-              name="Form" 
-              component={FormScreen} 
-              options={{ 
-                title: 'Fill Form',
+      <FormProvider>
+        <PaperProvider theme={theme}>
+          <NavigationContainer>
+            <StatusBar style="auto" />
+            <Stack.Navigator
+              screenOptions={{
                 headerStyle: {
-                  backgroundColor: '#25d366',
+                  backgroundColor: theme.colors.primary,
                 },
                 headerTintColor: '#fff',
                 headerTitleStyle: {
-                  fontWeight: '600',
-                  fontSize: 18,
-                  color: '#fff',
+                  fontWeight: 'bold',
                 },
               }}
-            />
-            <Stack.Screen 
-              name="SubmittedForms" 
-              component={SubmittedFormsScreen} 
-              options={{ title: 'Form Responses' }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </PaperProvider>
+            >
+              <Stack.Screen 
+                name="Home" 
+                component={HomeScreen} 
+                options={{ headerShown: false }}
+              />
+                          <Stack.Screen 
+                name="Form" 
+                component={FormScreen} 
+                options={{ 
+                  title: 'Fill Form',
+                  headerStyle: {
+                    backgroundColor: '#25d366',
+                  },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                    fontSize: 18,
+                    color: '#fff',
+                  },
+                }}
+              />
+              <Stack.Screen 
+                name="SubmittedForms" 
+                component={SubmittedFormsScreen} 
+                options={{ title: 'Form Responses' }}
+              />
+              <Stack.Screen 
+                name="Dashboard" 
+                component={DashboardScreen} 
+                options={{ 
+                  title: 'Dashboard',
+                  headerStyle: {
+                    backgroundColor: '#25d366',
+                  },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: '600',
+                    fontSize: 18,
+                    color: '#fff',
+                  },
+                }}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </PaperProvider>
+      </FormProvider>
     </SafeAreaProvider>
   );
 }

@@ -38,7 +38,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleTemplateSelect = (templateId: string, templateName: string) => {
     if (templateId === 'view-dashboard') {
-      navigation.navigate('SubmittedForms');
+      navigation.navigate('Dashboard');
     } else {
       navigation.navigate('Form', {
         templateId,
