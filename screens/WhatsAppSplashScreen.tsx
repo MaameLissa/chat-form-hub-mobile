@@ -1,0 +1,91 @@
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+
+const WhatsAppSplashScreen = () => {
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // @ts-ignore
+      navigation.navigate('WhatsAppWelcome');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [navigation]);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.centerContent}>
+        <View style={styles.iconCircle}>
+          <Ionicons name="logo-whatsapp" size={72} color="#25D366" />
+        </View>
+      </View>
+      <View style={styles.metaContainer}>
+        <Text style={styles.fromText}>from</Text>
+        <View style={styles.metaRow}>
+          <Image
+            source={require('../assets/meta-logo.jpeg')}
+            style={styles.metaLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.metaText}>Meta</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f6f5fa',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#25D366',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: '60%',
+  },
+  metaContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  fromText: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaLogo: {
+    width: 24,
+    height: 24,
+    marginRight: 4,
+  },
+  metaText: {
+    color: '#10b981',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});
+
+export default WhatsAppSplashScreen;

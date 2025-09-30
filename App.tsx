@@ -10,6 +10,10 @@ import FormScreen from './screens/FormScreen';
 import SubmittedFormsScreen from './screens/SubmittedFormsScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CustomFormBuilderScreen from './screens/CustomFormBuilderScreen';
+import WhatsAppSplashScreen from './screens/WhatsAppSplashScreen';
+import WhatsAppWelcomeScreen from './screens/WhatsAppWelcomeScreen';
+import PhoneNumberScreen from './screens/PhoneNumberScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
 import { RootStackParamList } from './types/navigation';
 import { FormProvider } from './context/FormContext';
 
@@ -34,6 +38,7 @@ export default function App() {
           <NavigationContainer>
             <StatusBar style="auto" />
             <Stack.Navigator
+              initialRouteName="WhatsAppSplash"
               screenOptions={{
                 headerStyle: {
                   backgroundColor: theme.colors.primary,
@@ -101,6 +106,26 @@ export default function App() {
                     color: '#fff',
                   },
                 }}
+              />
+              <Stack.Screen 
+                name="WhatsAppSplash" 
+                component={WhatsAppSplashScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="WhatsAppWelcome" 
+                component={WhatsAppWelcomeScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="PhoneNumber" 
+                component={PhoneNumberScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="EditProfile" 
+                component={EditProfileScreen} 
+                options={{ headerShown: false }}
               />
             </Stack.Navigator>
           </NavigationContainer>

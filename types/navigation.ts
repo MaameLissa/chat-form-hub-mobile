@@ -14,6 +14,10 @@ export type RootStackParamList = {
   SubmittedForms: undefined;
   Dashboard: undefined;
   CustomFormBuilder: undefined;
+  WhatsAppSplash: undefined;
+  WhatsAppWelcome: undefined;
+  PhoneNumber: undefined;
+  EditProfile: undefined;
 };
 
 export interface FormField {
