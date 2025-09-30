@@ -12,7 +12,7 @@ const EditProfileScreen = () => {
   const handleDone = () => {
     // Save profile logic here
     // @ts-ignore
-    navigation.navigate('Home');
+    navigation.navigate('Chat');
   };
 
   const handlePickImage = async () => {

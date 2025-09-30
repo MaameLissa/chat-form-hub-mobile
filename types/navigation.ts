@@ -18,6 +18,11 @@ export type RootStackParamList = {
   WhatsAppWelcome: undefined;
   PhoneNumber: undefined;
   EditProfile: undefined;
+  Chat: undefined;
+  ChatConversation: {
+    chatId: string;
+    chatName: string;
+  };
 };
 
 export interface FormField {

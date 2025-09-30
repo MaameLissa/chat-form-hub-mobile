@@ -14,6 +14,8 @@ import WhatsAppSplashScreen from './screens/WhatsAppSplashScreen';
 import WhatsAppWelcomeScreen from './screens/WhatsAppWelcomeScreen';
 import PhoneNumberScreen from './screens/PhoneNumberScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import ChatListScreen from './screens/ChatListScreen';
+import ChatConversationScreen from './screens/ChatConversationScreen';
 import { RootStackParamList } from './types/navigation';
 import { FormProvider } from './context/FormContext';
 
@@ -125,6 +127,16 @@ export default function App() {
               <Stack.Screen 
                 name="EditProfile" 
                 component={EditProfileScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Chat" 
+                component={ChatListScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="ChatConversation" 
+                component={ChatConversationScreen} 
                 options={{ headerShown: false }}
               />
             </Stack.Navigator>
