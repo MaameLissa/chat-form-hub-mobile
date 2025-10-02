@@ -1,18 +1,34 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { RootStackParamList } from '../types/navigation';
+
+type EditProfileScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const EditProfileScreen = () => {
-  // @ts-ignore
-  const navigation = useNavigation();
+  const navigation = useNavigation<EditProfileScreenNavigationProp>();
   const [name, setName] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
 
-  const handleDone = () => {
-    // Save profile logic here
-    // @ts-ignore
-    navigation.navigate('Chat');
+  const handleDone = async () => {
+    try {
+      const profile = {
+        firstName: name || 'User',
+        lastName: '',
+        displayName: name || 'Available',
+        avatar: avatar,
+      };
+      
+      await AsyncStorage.setItem('userProfile', JSON.stringify(profile));
+      
+      navigation.navigate('Chat');
+    } catch (error) {
+      console.log('Error saving profile:', error);
+      navigation.navigate('Chat');
+    }
   };
 
   const handlePickImage = async () => {
@@ -104,8 +120,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarImg: {
-    width: 40,
-    height: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   editText: {
     color: '#10b981',

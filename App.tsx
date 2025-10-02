@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator as createNativeStackNavigator } from '@react-navigation/stack';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,10 +16,16 @@ import PhoneNumberScreen from './screens/PhoneNumberScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ChatListScreen from './screens/ChatListScreen';
 import ChatConversationScreen from './screens/ChatConversationScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import SelectContactScreen from './screens/SelectContactScreen';
+import CallsScreen from './screens/CallsScreen';
+import UpdatesScreen from './screens/UpdatesScreen';
+import ToolsScreen from './screens/ToolsScreen';
 import { RootStackParamList } from './types/navigation';
 import { FormProvider } from './context/FormContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
-const Stack = createStackNavigator<RootStackParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const theme = {
   colors: {
@@ -34,12 +40,13 @@ const theme = {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <FormProvider>
-        <PaperProvider theme={theme}>
-          <NavigationContainer>
-            <StatusBar style="auto" />
-            <Stack.Navigator
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <FormProvider>
+          <PaperProvider theme={theme}>
+            <NavigationContainer>
+              <StatusBar style="auto" />
+              <Stack.Navigator
               initialRouteName="WhatsAppSplash"
               screenOptions={{
                 headerStyle: {
@@ -139,10 +146,36 @@ export default function App() {
                 component={ChatConversationScreen} 
                 options={{ headerShown: false }}
               />
+              <Stack.Screen 
+                name="SelectContact" 
+                component={SelectContactScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Settings" 
+                component={SettingsScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Calls" 
+                component={CallsScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Updates" 
+                component={UpdatesScreen} 
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="Tools" 
+                component={ToolsScreen} 
+                options={{ headerShown: false }}
+              />
             </Stack.Navigator>
-          </NavigationContainer>
-        </PaperProvider>
-      </FormProvider>
-    </SafeAreaProvider>
+            </NavigationContainer>
+          </PaperProvider>
+        </FormProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

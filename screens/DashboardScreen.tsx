@@ -40,6 +40,9 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{uri: string, name: string} | null>(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedResponses, setSelectedResponses] = useState<string[]>([]);
   
   // Filter states
   const [dateFilter, setDateFilter] = useState('Last 3 Months');
@@ -108,7 +111,10 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleImagePress = (file: {name: string, type: string, uri: string}) => {
     if (file.type && file.type.includes('image')) {
+      console.log('Opening image:', file.uri, 'Name:', file.name);
       setSelectedImage({ uri: file.uri, name: file.name });
+    } else {
+      Alert.alert('File Type', 'This file type is not supported for preview.');
     }
   };
 
@@ -138,6 +144,108 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
+  const toggleMultiSelect = () => {
+    setMultiSelectMode(!multiSelectMode);
+    setSelectedResponses([]);
+  };
+
+  const toggleResponseSelection = (responseId: string) => {
+    setSelectedResponses(prev => 
+      prev.includes(responseId) 
+        ? prev.filter(id => id !== responseId)
+        : [...prev, responseId]
+    );
+  };
+
+  const selectAllResponses = () => {
+    if (selectedResponses.length === filteredResponses.length) {
+      setSelectedResponses([]);
+    } else {
+      setSelectedResponses(filteredResponses.map(r => r.id));
+    }
+  };
+
+  const handleForwardResponses = () => {
+    if (selectedResponses.length === 0) {
+      Alert.alert('No Selection', 'Please select at least one response to forward.');
+      return;
+    }
+
+    const selectedData = formResponses.filter(r => selectedResponses.includes(r.id));
+    
+    Alert.alert(
+      'Forward Responses',
+      `Forward ${selectedResponses.length} selected response(s)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Forward', 
+          onPress: () => {
+            // Navigate to contact selection for forwarding
+            navigation.navigate('SelectContact', {
+              forwardData: selectedData,
+              fromDashboard: true
+            });
+            setMultiSelectMode(false);
+            setSelectedResponses([]);
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSendToChat = () => {
+    if (selectedResponses.length === 0) {
+      Alert.alert('No Selection', 'Please select at least one response to send.');
+      return;
+    }
+
+    Alert.alert(
+      'Send to Current Chat',
+      'Which chat would you like to send the selected responses to?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Enchanté Lissa', 
+          onPress: () => sendResponsesToChat('1', 'Enchanté Lissa')
+        },
+        { 
+          text: 'Choose Chat', 
+          onPress: () => {
+            // Navigate to chat selection
+            navigation.navigate('Chat');
+          }
+        }
+      ]
+    );
+  };
+
+  const sendResponsesToChat = (chatId: string, chatName: string) => {
+    const selectedData = formResponses.filter(r => selectedResponses.includes(r.id));
+    
+    // Format the data for chat - ensure it matches SubmittedForm interface
+    const formattedData = selectedData.map(response => ({
+      id: response.id,
+      type: response.type,
+      templateName: response.templateName,
+      data: response.data,
+      uploadedFiles: response.uploadedFiles,
+      submittedAt: response.submittedAt
+    }));
+
+    navigation.navigate('ChatConversation', {
+      chatId,
+      chatName,
+      formData: formattedData[0]?.data, // Send first response data
+      fileData: formattedData[0]?.uploadedFiles, // Send first response files
+      formType: `Dashboard Export (${selectedResponses.length} responses)`,
+      dashboardResponses: formattedData // Send all responses
+    });
+
+    setMultiSelectMode(false);
+    setSelectedResponses([]);
+  };
+
   const renderFilterButton = (label: string, isSelected: boolean, onPress: () => void) => (
     <TouchableOpacity
       style={[
@@ -160,10 +268,21 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     const isFeedback = response.type === 'Feedback';
     const isContact = response.type === 'Contact';
     const isCustomForm = response.type === 'Custom Form';
+    const isSelected = selectedResponses.includes(response.id);
     
     return (
-      <View key={response.id} style={styles.responseCard}>
+      <View key={response.id} style={[styles.responseCard, isSelected && styles.selectedCard]}>
         <View style={styles.responseHeader}>
+          {multiSelectMode && (
+            <TouchableOpacity
+              style={styles.checkboxContainer}
+              onPress={() => toggleResponseSelection(response.id)}
+            >
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Ionicons name="checkmark" size={16} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+          )}
           <View style={styles.responseHeaderLeft}>
             <Text style={[
               styles.responseType,
@@ -173,12 +292,14 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
             <Text style={styles.responseTime}>{response.submittedAt}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDeleteResponse(response.id, response.data.name || 'Unknown', response.type)}
-          >
-            <Ionicons name="trash-outline" size={18} color="#ef4444" />
-          </TouchableOpacity>
+          {!multiSelectMode && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteResponse(response.id, response.data.name || 'Unknown', response.type)}
+            >
+              <Ionicons name="trash-outline" size={18} color="#ef4444" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.responseContent}>
@@ -402,7 +523,13 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             </View>
             <TouchableOpacity 
               style={styles.backButton}
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Home');
+                }
+              }}
             >
               <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
@@ -440,15 +567,68 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           )}
         </View>
 
-        {/* Export CSV Button */}
-        <View style={styles.exportSection}>
-          <TouchableOpacity 
-            style={styles.exportButton}
-            onPress={handleExportCSV}
-          >
-            <Ionicons name="download-outline" size={20} color="#10b981" />
-            <Text style={styles.exportButtonText}>Export CSV</Text>
-          </TouchableOpacity>
+        {/* Action Buttons Section */}
+        <View style={styles.actionSection}>
+          {!multiSelectMode ? (
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity 
+                style={styles.exportButton}
+                onPress={handleExportCSV}
+              >
+                <Ionicons name="download-outline" size={20} color="#10b981" />
+                <Text style={styles.exportButtonText}>Export CSV</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.selectButton}
+                onPress={toggleMultiSelect}
+              >
+                <Ionicons name="checkmark-circle-outline" size={20} color="#25D366" />
+                <Text style={styles.selectButtonText}>Select Multiple</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.multiSelectControls}>
+              <View style={styles.selectionInfo}>
+                <Text style={styles.selectionCount}>
+                  {selectedResponses.length} of {filteredResponses.length} selected
+                </Text>
+                <TouchableOpacity onPress={selectAllResponses}>
+                  <Text style={styles.selectAllText}>
+                    {selectedResponses.length === filteredResponses.length ? 'Deselect All' : 'Select All'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.multiSelectActions}>
+                <TouchableOpacity 
+                  style={styles.forwardButton}
+                  onPress={handleForwardResponses}
+                  disabled={selectedResponses.length === 0}
+                >
+                  <Ionicons name="arrow-forward" size={20} color="#fff" />
+                  <Text style={styles.forwardButtonText}>Forward</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.sendToChatButton}
+                  onPress={handleSendToChat}
+                  disabled={selectedResponses.length === 0}
+                >
+                  <Ionicons name="chatbubble" size={20} color="#fff" />
+                  <Text style={styles.sendToChatButtonText}>Send to Chat</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.cancelSelectButton}
+                  onPress={toggleMultiSelect}
+                >
+                  <Ionicons name="close" size={20} color="#ef4444" />
+                  <Text style={styles.cancelSelectButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -554,28 +734,60 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
         transparent={true}
         animationType="fade"
         onRequestClose={() => setSelectedImage(null)}
+        statusBarTranslucent={true}
       >
         <View style={styles.imageModalOverlay}>
-          <View style={styles.imageModalContainer}>
-            <View style={styles.imageModalHeader}>
-              <Text style={styles.imageModalTitle} numberOfLines={1}>
-                {selectedImage?.name}
-              </Text>
-              <TouchableOpacity 
-                style={styles.imageModalCloseButton}
-                onPress={() => setSelectedImage(null)}
-              >
-                <Ionicons name="close" size={24} color="#ffffff" />
-              </TouchableOpacity>
-            </View>
+          {/* Header */}
+          <View style={styles.imageModalHeader}>
+            <Text style={styles.imageModalTitle} numberOfLines={1}>
+              {selectedImage?.name || 'Image'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.imageModalCloseButton}
+              onPress={() => {
+                setSelectedImage(null);
+                setImageLoading(false);
+              }}
+            >
+              <Ionicons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Main Image Area */}
+          <View style={styles.imageViewArea}>
             {selectedImage && (
-              <Image 
-                source={{ uri: selectedImage.uri }} 
-                style={styles.fullScreenImage}
-                resizeMode="contain"
-              />
+              <>
+                {imageLoading && (
+                  <View style={styles.imageLoadingContainer}>
+                    <Text style={styles.imageLoadingText}>Loading...</Text>
+                  </View>
+                )}
+                <Image 
+                  source={{ uri: selectedImage.uri }} 
+                  style={styles.fullScreenImage}
+                  resizeMode="contain"
+                  onLoadStart={() => setImageLoading(true)}
+                  onLoad={() => setImageLoading(false)}
+                  onError={(error) => {
+                    console.log('Image load error:', error);
+                    setImageLoading(false);
+                    Alert.alert('Error', 'Cannot load image');
+                    setSelectedImage(null);
+                  }}
+                />
+              </>
             )}
           </View>
+
+          {/* Tap to close overlay */}
+          <TouchableOpacity 
+            style={styles.closeOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setSelectedImage(null);
+              setImageLoading(false);
+            }}
+          />
         </View>
       </Modal>
     </SafeAreaView>
@@ -797,20 +1009,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 12,
   },
-  exportSection: {
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    alignItems: 'center',
-  },
+
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#10b981',
-    paddingHorizontal: 24,
+    backgroundColor: '#f0f9f0',
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10b981',
+    flex: 1,
+    justifyContent: 'center',
     gap: 8,
   },
   exportButtonText: {
@@ -938,41 +1148,190 @@ const styles = StyleSheet.create({
   // Image Modal Styles
   imageModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageModalContainer: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
   },
   imageModalHeader: {
     position: 'absolute',
-    top: 50,
+    top: 60,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    zIndex: 1,
+    zIndex: 10,
   },
   imageModalTitle: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#ffffff',
     marginRight: 16,
   },
   imageModalCloseButton: {
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  imageViewArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+    paddingBottom: 50,
+    paddingHorizontal: 20,
   },
   fullScreenImage: {
     width: '100%',
     height: '100%',
+    maxWidth: '100%',
+    maxHeight: '100%',
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  imageLoadingText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  closeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  selectedCard: {
+    borderColor: '#25D366',
+    borderWidth: 2,
+    backgroundColor: '#f0f9f0',
+  },
+  checkboxContainer: {
+    marginRight: 12,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxSelected: {
+    backgroundColor: '#25D366',
+    borderColor: '#25D366',
+  },
+  actionSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f9f0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#25D366',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  selectButtonText: {
+    color: '#25D366',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  multiSelectControls: {
+    gap: 16,
+  },
+  selectionInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectionCount: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  selectAllText: {
+    fontSize: 14,
+    color: '#25D366',
+    fontWeight: '600',
+  },
+  multiSelectActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  forwardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  forwardButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  sendToChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#25D366',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  sendToChatButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  cancelSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  cancelSelectButtonText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
 

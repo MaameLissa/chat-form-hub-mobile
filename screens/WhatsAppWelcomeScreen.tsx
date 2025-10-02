@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../types/navigation';
+
+type WhatsAppWelcomeScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const WhatsAppWelcomeScreen = () => {
-  // @ts-ignore
-  const navigation = useNavigation();
+  const navigation = useNavigation<WhatsAppWelcomeScreenNavigationProp>();
   const handleAgree = () => {
-    // @ts-ignore
     navigation.navigate('PhoneNumber');
   };
 
@@ -85,12 +87,12 @@ const styles = StyleSheet.create({
   agreeButton: {
     backgroundColor: '#007AFF',
     borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
     alignItems: 'center',
     marginTop: 16,
     marginBottom: 8,
-    width: '90%',
+    width: '70%',
     alignSelf: 'center',
   },
   agreeButtonText: {

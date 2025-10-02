@@ -18,7 +18,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "This app uses location to help you select your delivery address."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true,

@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, FlatList } from 'react-native';
+import { View, ScrollView, StyleSheet, FlatList, Alert, TouchableOpacity } from 'react-native';
 import { Card, Title, Paragraph, Text, Chip, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Ionicons } from '@expo/vector-icons';
 import { SubmittedForm } from '../types/navigation';
 
 const SubmittedFormsScreen: React.FC = () => {
-  const [submittedForms] = useState<SubmittedForm[]>([
+  const [submittedForms, setSubmittedForms] = useState<SubmittedForm[]>([
     {
       id: '1',
+      type: 'Customer Details',
       templateName: 'Customer Details',
       data: {
         name: 'John Smith',
@@ -18,10 +20,11 @@ const SubmittedFormsScreen: React.FC = () => {
         delivery_address: '123 Main St, New York, NY 10001',
         special_instructions: 'Please call before delivery'
       },
-      timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 days ago
+      submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2 days ago
     },
     {
       id: '2',
+      type: 'Service Booking',
       templateName: 'Service Booking',
       data: {
         name: 'Sarah Johnson',
@@ -30,10 +33,11 @@ const SubmittedFormsScreen: React.FC = () => {
         preferred_date: '12/20/2024',
         description: 'Need to install new security system'
       },
-      timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1 day ago
+      submittedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() // 1 day ago
     },
     {
       id: '3',
+      type: 'Feedback',
       templateName: 'Feedback Form',
       data: {
         name: 'Michael Chen',
@@ -42,10 +46,11 @@ const SubmittedFormsScreen: React.FC = () => {
         feedback: 'Great service and very professional team!',
         suggestions: 'Maybe add more payment options'
       },
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 hours ago
+      submittedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() // 6 hours ago
     },
     {
       id: '4',
+      type: 'Contact',
       templateName: 'Contact Us',
       data: {
         name: 'Emma Davis',
@@ -54,12 +59,13 @@ const SubmittedFormsScreen: React.FC = () => {
         subject: 'Product Inquiry',
         message: 'I would like to know more about your latest products and pricing.'
       },
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
+      submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
     }
   ]);
 
-  const formatTimestamp = (timestamp: Date): string => {
+  const formatTimestamp = (submittedAt: string): string => {
     const now = new Date();
+    const timestamp = new Date(submittedAt);
     const diff = now.getTime() - timestamp.getTime();
     const hours = diff / (1000 * 60 * 60);
     const days = hours / 24;
@@ -90,11 +96,32 @@ const SubmittedFormsScreen: React.FC = () => {
     }
   };
 
-  const getStatusColor = (timestamp: Date): string => {
+  const getStatusColor = (submittedAt: string): string => {
+    const timestamp = new Date(submittedAt);
     const hours = (new Date().getTime() - timestamp.getTime()) / (1000 * 60 * 60);
     if (hours < 24) return '#4CAF50'; // Green for recent
     if (hours < 48) return '#FF9800'; // Orange for yesterday
     return '#9E9E9E'; // Gray for older
+  };
+
+  const handleDeleteForm = (formId: string) => {
+    Alert.alert(
+      'Delete Form Response',
+      'Are you sure you want to delete this form response? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setSubmittedForms(prev => prev.filter(form => form.id !== formId));
+          },
+        },
+      ]
+    );
   };
 
   const renderFormItem = ({ item }: { item: SubmittedForm }) => (
@@ -113,13 +140,19 @@ const SubmittedFormsScreen: React.FC = () => {
             <View style={styles.statusRow}>
               <Chip 
                 mode="outlined" 
-                style={[styles.statusChip, { borderColor: getStatusColor(item.timestamp) }]}
-                textStyle={{ color: getStatusColor(item.timestamp) }}
+                style={[styles.statusChip, { borderColor: getStatusColor(item.submittedAt) }]}
+                textStyle={{ color: getStatusColor(item.submittedAt) }}
               >
-                {formatTimestamp(item.timestamp)}
+                {formatTimestamp(item.submittedAt)}
               </Chip>
             </View>
           </View>
+          <TouchableOpacity 
+            style={styles.deleteButton} 
+            onPress={() => handleDeleteForm(item.id)}
+          >
+            <Ionicons name="trash-outline" size={24} color="#FF3B30" />
+          </TouchableOpacity>
         </View>
 
         <Divider style={styles.divider} />
@@ -220,6 +253,11 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#FFF0F0',
   },
   formTitle: {
     fontSize: 18,

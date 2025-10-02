@@ -5,11 +5,16 @@ export interface FormConfig {
 }
 
 export type RootStackParamList = {
-  Home: undefined;
+  Home: {
+    chatId?: string;
+    chatName?: string;
+  } | undefined;
   Form: {
     templateId: string;
     templateName: string;
     customConfig?: FormConfig;
+    chatId?: string;
+    chatName?: string;
   };
   SubmittedForms: undefined;
   Dashboard: undefined;
@@ -22,7 +27,20 @@ export type RootStackParamList = {
   ChatConversation: {
     chatId: string;
     chatName: string;
+    formData?: Record<string, any>;
+    fileData?: Record<string, any>;
+    formType?: string;
+    dashboardResponses?: SubmittedForm[];
   };
+  Settings: undefined;
+  SelectContact: {
+    forwardData?: SubmittedForm[];
+    fromDashboard?: boolean;
+  } | undefined;
+  Calls: undefined;
+  Updates: undefined;
+  Tools: undefined;
+  ChatStack?: undefined;
 };
 
 export interface FormField {
@@ -44,8 +62,13 @@ export interface FormTemplate {
 
 export interface SubmittedForm {
   id: string;
+  type: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
   templateName: string;
-  data: Record<string, string>;
-  files?: Record<string, any>;
-  timestamp: Date;
+  submittedAt: string;
+  data: Record<string, any>;
+  uploadedFiles?: {
+    name: string;
+    type: string;
+    uri: string;
+  }[];
 }

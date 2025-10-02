@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -21,7 +21,9 @@ interface Props {
 }
 
 const FormScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { templateId, templateName, customConfig } = route.params;
+  const { templateId, templateName, customConfig } = route.params || {};
+  const chatId = (route.params as any)?.chatId;
+  const chatName = (route.params as any)?.chatName;
   const { addSubmittedForm } = useFormContext();
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [fileData, setFileData] = useState<Record<string, any>>({});
@@ -38,6 +40,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const [showSubmitSuccessModal, setShowSubmitSuccessModal] = useState(false);
   const [showCustomFormNameModal, setShowCustomFormNameModal] = useState(false);
   const [customFormName, setCustomFormName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedTemplates, setSavedTemplates] = useState(() => {
     // Service Booking templates
     if (templateId === 'service-booking') {
@@ -104,30 +108,34 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   });
 
   // Get form configuration from separate files or use custom config
-  const formConfig = customConfig || getFormConfig(templateId);
-  const fields = formConfig?.fields || [];
-  const formTitle = formConfig?.title || templateName;
-  const formSubtitle = formConfig?.subtitle || 'Complete the form below';
+  const { formConfig, fields, formTitle, formSubtitle } = useMemo(() => {
+    const config = customConfig || getFormConfig(templateId);
+    return {
+      formConfig: config,
+      fields: config?.fields || [],
+      formTitle: config?.title || templateName,
+      formSubtitle: config?.subtitle || 'Complete the form below'
+    };
+  }, [customConfig, templateId, templateName]);
 
-  // Debug logging
-  console.log('=== FormScreen Debug Info ===');
-  console.log('Template ID:', templateId);
-  console.log('Template Name:', templateName);
-  console.log('Custom Config exists:', !!customConfig);
-  console.log('Form Config:', formConfig);
-  console.log('Fields array length:', fields.length);
-  console.log('Fields:', fields);
-  console.log('Form Title:', formTitle);
-  console.log('Form Subtitle:', formSubtitle);
-  console.log('=============================');
+  // Debug logging (removed for production)
 
-  const handleInputChange = (fieldId: string, value: string) => {
+  const handleInputChange = useCallback((fieldId: string, value: string) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
-  };
+    
+    // Clear field error when user starts typing
+    if (fieldErrors[fieldId]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[fieldId];
+        return newErrors;
+      });
+    }
+  }, [fieldErrors]);
 
   const [currentAddressFieldId, setCurrentAddressFieldId] = useState<string>('');
 
-  const handleLocationSelect = (address: string, coordinates: { latitude: number; longitude: number }) => {
+  const handleLocationSelect = useCallback((address: string, coordinates: { latitude: number; longitude: number }) => {
     if (currentAddressFieldId) {
       setFormData(prev => ({ ...prev, [currentAddressFieldId]: address }));
     } else {
@@ -135,7 +143,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       setFormData(prev => ({ ...prev, delivery_address: address }));
     }
     setSelectedCoordinates(coordinates);
-  };
+  }, [currentAddressFieldId]);
 
   const handleFileSelect = async (fieldId: string) => {
     try {
@@ -145,14 +153,23 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setFileData(prev => ({ ...prev, [fieldId]: result.assets[0] }));
+        const selectedFile = result.assets[0];
+        
+        // Validate file size (10MB limit)
+        if (selectedFile.size && selectedFile.size > 10 * 1024 * 1024) {
+          Alert.alert('File Too Large', 'Please select a file smaller than 10MB.');
+          return;
+        }
+        
+        setFileData(prev => ({ ...prev, [fieldId]: selectedFile }));
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to select file');
+      console.error('File selection error:', err);
+      Alert.alert('Error', 'Failed to select file. Please try again.');
     }
   };
 
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const missingFields = fields
       .filter(field => field.required && field.type !== 'file' && !formData[field.id])
       .map(field => field.label);
@@ -160,12 +177,40 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     if (missingFields.length > 0) {
       Alert.alert(
         'Missing Required Fields',
-        `Please fill in the following fields: ${missingFields.join(', ')}`
+        `Please fill in the following fields:\n\n• ${missingFields.join('\n• ')}`,
+        [{ text: 'OK', style: 'default' }]
       );
       return false;
     }
+
+    // Validate email format
+    const emailFields = fields.filter(field => field.type === 'email');
+    for (const field of emailFields) {
+      const email = formData[field.id];
+      if (email && !/\S+@\S+\.\S+/.test(email)) {
+        Alert.alert(
+          'Invalid Email',
+          `Please enter a valid email address for ${field.label}.`
+        );
+        return false;
+      }
+    }
+
+    // Validate phone format
+    const phoneFields = fields.filter(field => field.type === 'phone');
+    for (const field of phoneFields) {
+      const phone = formData[field.id];
+      if (phone && !/^\+?[\d\s\-\(\)]{10,}$/.test(phone)) {
+        Alert.alert(
+          'Invalid Phone Number',
+          `Please enter a valid phone number for ${field.label}.`
+        );
+        return false;
+      }
+    }
+
     return true;
-  };
+  }, [fields, formData]);
 
   const generateWhatsAppMessage = (): string => {
     let message = `*${templateName} Form Submission*\n\n`;
@@ -194,88 +239,89 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     return encodeURIComponent(message);
   };
 
-  const handleSubmit = () => {
-    console.log('=== SUBMIT BUTTON PRESSED ===');
-    console.log('customConfig exists:', !!customConfig);
-    console.log('templateId:', templateId);
-    console.log('showCustomFormNameModal state:', showCustomFormNameModal);
-    
-    if (!validateForm()) {
-      console.log('Form validation failed');
+  const handleSubmit = useCallback(() => {
+    if (isSubmitting || !validateForm()) {
       return;
     }
 
     // If it's a custom form, show naming modal first
     if (customConfig) {
-      console.log('Showing custom form name modal');
       setShowCustomFormNameModal(true);
       return;
     }
 
-    console.log('Submitting predefined form directly');
     // For predefined forms, submit directly
     performSubmit(templateName);
-  };
+  }, [isSubmitting, validateForm, customConfig, templateName]);
 
-  const performSubmit = (finalFormName: string) => {
-    // Create uploaded files array if there are any files
-    const uploadedFiles = Object.keys(fileData).length > 0 
-      ? Object.keys(fileData).map(fieldId => ({
-          name: fileData[fieldId].name || 'Uploaded File',
-          type: fileData[fieldId].mimeType || 'file',
-          uri: fileData[fieldId].uri || ''
-        }))
-      : undefined;
+  const performSubmit = useCallback(async (finalFormName: string) => {
+    setIsSubmitting(true);
+    
+    try {
+      // Create uploaded files array if there are any files
+      const uploadedFiles = Object.keys(fileData).length > 0 
+        ? Object.keys(fileData).map(fieldId => ({
+            name: fileData[fieldId].name || 'Uploaded File',
+            type: fileData[fieldId].mimeType || 'file',
+            uri: fileData[fieldId].uri || ''
+          }))
+        : undefined;
 
-    // Determine form type based on templateId and customConfig
-    let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
-    
-    console.log('Determining form type - templateId:', templateId, 'customConfig exists:', !!customConfig);
-    
-    // Priority check: if customConfig exists, it's always a custom form
-    if (customConfig) {
-      formType = 'Custom Form';
-      console.log('Using Custom Form type due to customConfig presence');
-    } else {
-      switch (templateId) {
-        case 'customer-details':
-          formType = 'Customer Details';
-          break;
-        case 'service-booking':
-          formType = 'Service Booking';
-          break;
-        case 'feedback':
-          formType = 'Feedback';
-          break;
-        case 'contact-form':
-          formType = 'Contact';
-          break;
-        case 'custom-form':
-        case 'dynamic-custom-form':
-          formType = 'Custom Form';
-          break;
-        default:
-          formType = 'Customer Details';
+      // Determine form type based on templateId and customConfig
+      let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
+      
+      // Priority check: if customConfig exists, it's always a custom form
+      if (customConfig) {
+        formType = 'Custom Form';
+      } else {
+        switch (templateId) {
+          case 'customer-details':
+            formType = 'Customer Details';
+            break;
+          case 'service-booking':
+            formType = 'Service Booking';
+            break;
+          case 'feedback':
+            formType = 'Feedback';
+            break;
+          case 'contact-form':
+            formType = 'Contact';
+            break;
+          case 'custom-form':
+          case 'dynamic-custom-form':
+            formType = 'Custom Form';
+            break;
+          default:
+            formType = 'Customer Details';
+        }
       }
-      console.log('Using form type from templateId switch:', formType);
+
+      // Simulate network delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Add the form to the global context
+      addSubmittedForm({
+        type: formType,
+        templateName: finalFormName,
+        data: { ...formData },
+        uploadedFiles,
+      });
+
+      // Show success modal
+      setShowSubmitSuccessModal(true);
+    } catch (error) {
+      Alert.alert(
+        'Submission Error',
+        'Failed to submit form. Please check your connection and try again.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Add the form to the global context
-    addSubmittedForm({
-      type: formType,
-      templateName: finalFormName,
-      data: { ...formData },
-      uploadedFiles,
-    });
-
-    // Show success modal
-    setShowSubmitSuccessModal(true);
-  };
+  }, [fileData, customConfig, templateId, formData, addSubmittedForm]);
 
   const handleCustomFormNameConfirm = () => {
-    console.log('Custom form name confirm pressed:', customFormName);
     const finalName = customFormName.trim() || 'Custom Form';
-    console.log('Final form name:', finalName);
     setShowCustomFormNameModal(false);
     performSubmit(finalName);
     setCustomFormName('');
@@ -290,7 +336,27 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleGoHome = () => {
     setShowSubmitSuccessModal(false);
-    navigation.navigate('Home');
+    if (chatId && chatName) {
+      // Reset navigation stack and go back to chat with form data
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'ChatConversation',
+            params: {
+              chatId: chatId,
+              chatName: chatName,
+              formData: formData,
+              fileData: fileData,
+              formType: templateName || 'Form',
+            }
+          }
+        ],
+      });
+    } else {
+      // If no chat context, go to home
+      navigation.navigate('Home');
+    }
   };
 
   const handleSaveTemplate = () => {
@@ -332,8 +398,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const renderField = (field: any) => {
-    console.log('Rendering field:', field.id, 'type:', field.type, 'label:', field.label);
+  const renderField = useCallback((field: FormField) => {
     
     switch (field.type) {
       case 'textarea':
@@ -368,7 +433,6 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
               <TouchableOpacity 
                 style={styles.locationButton}
                 onPress={() => {
-                  console.log('Location button pressed for field:', field.id);
                   setCurrentAddressFieldId(field.id);
                   setShowLocationPicker(true);
                 }}
@@ -519,7 +583,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         );
     }
-  };
+  }, [formData, fileData, showDropdown, showDatePicker, handleInputChange, handleFileSelect, setCurrentAddressFieldId, setShowLocationPicker]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -625,7 +689,26 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.bottomButtons}>
           <TouchableOpacity 
             style={styles.backButton} 
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              if (chatId && chatName) {
+                // Reset navigation stack and go directly back to chat
+                navigation.reset({
+                  index: 0,
+                  routes: [
+                    {
+                      name: 'ChatConversation',
+                      params: {
+                        chatId: chatId,
+                        chatName: chatName,
+                      }
+                    }
+                  ],
+                });
+              } else {
+                // Otherwise go to Home
+                navigation.navigate('Home');
+              }
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.backButtonText}>Back</Text>
@@ -640,11 +723,16 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.submitButton} 
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
             onPress={handleSubmit}
             activeOpacity={0.8}
+            disabled={isSubmitting}
           >
-            <Text style={styles.submitButtonText}>Submit</Text>
+            {isSubmitting ? (
+              <Text style={styles.submitButtonText}>Submitting...</Text>
+            ) : (
+              <Text style={styles.submitButtonText}>Submit</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -1052,6 +1140,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 4,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    shadowOpacity: 0.1,
   },
   submitButtonText: {
     fontSize: 15,

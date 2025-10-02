@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  SafeAreaView,
   Image,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  Linking,
+  StatusBar,
+  Pressable,
+  Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { RootStackParamList } from '../types/navigation';
+import * as Clipboard from 'expo-clipboard';
+import { Audio } from 'expo-av';
 
 interface Message {
   id: string;
@@ -20,14 +31,35 @@ interface Message {
   timestamp: string;
   isBot: boolean;
   isLink?: boolean;
+  delivered?: boolean;
+  read?: boolean;
+  imageUri?: string;
+  isVoice?: boolean;
+  audioUri?: string;
+  durationSeconds?: number;
+  starred?: boolean;
+  attachments?: Array<{
+    name: string;
+    uri: string;
+    type: string;
+  }>;
 }
 
+type ChatConversationScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+
 const ChatConversationScreen = ({ route }: any) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<ChatConversationScreenNavigationProp>();
   const [message, setMessage] = useState('');
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [actionSheetMessage, setActionSheetMessage] = useState<Message | null>(null);
+  const [soundObj, setSoundObj] = useState<Audio.Sound | null>(null);
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [viewingImageLoading, setViewingImageLoading] = useState(false);
   
-  const { chatId, chatName } = route?.params || { chatId: '1', chatName: 'Enchanté Lissa' };
+  const { chatId, chatName, formData, fileData, formType, dashboardResponses } = route?.params || { chatId: '1', chatName: 'Enchanté Lissa' };
+  const displayName = chatName || 'Unknown Contact';
   
   const getMessagesForChat = (id: string): Message[] => {
     switch (id) {
@@ -116,26 +148,152 @@ const ChatConversationScreen = ({ route }: any) => {
     }
   };
   
-  const [messages, setMessages] = useState<Message[]>(getMessagesForChat(chatId));
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    loadMessages();
+  }, [chatId]);
+
+  useEffect(() => {
+    if (formData && formType) {
+      // Create a form message when form data is received
+      addFormMessage(formData, formType, fileData);
+    }
+    
+    // Handle multiple dashboard responses
+    if (dashboardResponses && dashboardResponses.length > 0) {
+      dashboardResponses.forEach((response: any, index: number) => {
+        setTimeout(() => {
+          addFormMessage(
+            response.data, 
+            response.type, 
+            response.uploadedFiles
+          );
+        }, index * 500); // Stagger the messages by 500ms
+      });
+    }
+  }, [formData, formType, fileData, dashboardResponses]);
+
+  useEffect(() => {
+    return () => {
+      if (soundObj) {
+        soundObj.unloadAsync();
+      }
+      if (recording) {
+        recording.stopAndUnloadAsync().catch(()=>{});
+      }
+    };
+  }, [soundObj, recording]);
+
+  const loadMessages = async () => {
+    try {
+      const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
+      if (savedMessages) {
+        setMessages(JSON.parse(savedMessages));
+      } else {
+        // Load default messages for first time
+        const defaultMessages = getMessagesForChat(chatId);
+        setMessages(defaultMessages);
+        await AsyncStorage.setItem(`messages_${chatId}`, JSON.stringify(defaultMessages));
+      }
+    } catch (error) {
+      console.log('Error loading messages:', error);
+      setMessages(getMessagesForChat(chatId));
+    }
+  };
+
+  const saveMessages = async (newMessages: Message[]) => {
+    try {
+      await AsyncStorage.setItem(`messages_${chatId}`, JSON.stringify(newMessages));
+    } catch (error) {
+      console.log('Error saving messages:', error);
+    }
+  };
 
   const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    if (!name || name.trim() === '') return 'NA';
+    const cleanName = name.replace(/[~_@👑🔥💯♻️🏃🏽🤚🏽🙏🏽|>•حفيد كتييد الحمدانله]/g, '').trim();
+    const nameParts = cleanName.split(' ').filter(part => part.length > 0);
+    if (nameParts.length === 0) return 'NA';
+    return nameParts.map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const getAvatarColor = (id: string) => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
-    return colors[parseInt(id) % colors.length];
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#A8E6CF', '#FFD93D', '#6BCF7F', '#4D94FF', '#FF6B9D'];
+    const numericId = id ? Math.abs(id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) : 0;
+    return colors[numericId % colors.length];
   };
 
-  const handleSend = () => {
+  const addFormMessage = async (formData: any, formType: string, fileData?: any) => {
+    // Format form data into a readable message
+    let formText = `📋 ${formType} Submitted:\n\n`;
+    Object.keys(formData || {}).forEach(key => {
+      const value = formData[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        const fieldName = key
+          .replace(/([A-Z])/g, ' $1')
+          .replace(/_/g, ' ')
+          .replace(/^./, str => str.toUpperCase());
+        formText += `${fieldName}: ${value}\n`;
+      }
+    });
+
+    // Build attachments array (supports array or object input)
+    const attachments: Array<{ name: string; uri: string; type: string }> = [];
+    if (fileData) {
+      if (Array.isArray(fileData)) {
+        fileData.forEach(f => {
+          if (f && (f.uri || f.url)) {
+            attachments.push({
+              name: f.name || 'file',
+              uri: f.uri || f.url || '',
+              type: f.type || f.mimeType || 'file'
+            });
+          }
+        });
+      } else if (typeof fileData === 'object') {
+        Object.keys(fileData).forEach(key => {
+          const f = fileData[key];
+            if (f && (f.uri || f.url)) {
+              attachments.push({
+                name: f.name || key,
+                uri: f.uri || f.url || '',
+                type: f.type || f.mimeType || 'file'
+              });
+            }
+        });
+      }
+    }
+
+    // Do NOT set imageUri for form submissions; show all files as attachments below text
+    const formMessage: Message = {
+      id: Date.now().toString(),
+      text: formText.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isBot: false,
+      delivered: true,
+      read: true,
+      attachments: attachments.length ? attachments : undefined,
+    };
+
+    const updatedMessages = [...messages, formMessage];
+    setMessages(updatedMessages);
+    await saveMessages(updatedMessages);
+  };
+
+  const handleSend = async () => {
     if (message.trim()) {
       const newMessage: Message = {
         id: Date.now().toString(),
         text: message.trim(),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isBot: false,
+        delivered: true,
+        read: true,
       };
-      setMessages(prev => [...prev, newMessage]);
+      const updatedMessages = [...messages, newMessage];
+      setMessages(updatedMessages);
+      await saveMessages(updatedMessages);
       setMessage('');
     }
   };
@@ -145,97 +303,478 @@ const ChatConversationScreen = ({ route }: any) => {
   };
 
   const handleCamera = () => {
-    // Handle camera logic
-    console.log('Camera pressed');
+    Alert.alert(
+      'Select Media',
+      'Choose an option',
+      [
+        { text: 'Take Photo', onPress: () => takePhoto() },
+        { text: 'Choose from Gallery', onPress: () => chooseFromGallery() },
+        { text: 'Record Video', onPress: () => recordVideo() },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const takePhoto = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required to take photos. Please enable it in settings.');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        const newMessage: Message = {
+          id: Date.now().toString(),
+          text: 'Photo',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isBot: false,
+          delivered: true,
+          read: true,
+          imageUri: imageUri,
+        };
+        const updatedMessages = [...messages, newMessage];
+        setMessages(updatedMessages);
+        await saveMessages(updatedMessages);
+      }
+    } catch (error) {
+      console.error('Photo capture error:', error);
+      Alert.alert('Camera Error', 'Failed to take photo. Please check your camera and try again.');
+    }
+  };
+
+  const chooseFromGallery = async () => {
+    try {
+      // Request media library permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Gallery permission is required to select photos');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const mediaUri = result.assets[0].uri;
+        const mediaType = result.assets[0].type || 'image';
+        const newMessage: Message = {
+          id: Date.now().toString(),
+          text: mediaType.startsWith('video') ? 'Video' : 'Photo',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isBot: false,
+          delivered: true,
+          read: true,
+          imageUri: mediaUri,
+        };
+        const updatedMessages = [...messages, newMessage];
+        setMessages(updatedMessages);
+        await saveMessages(updatedMessages);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to select media from gallery');
+    }
+  };
+
+  const recordVideo = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required to record videos');
+        return;
+      }
+
+      // Launch camera for video
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        quality: 0.8,
+        videoMaxDuration: 30, // 30 seconds max
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const videoUri = result.assets[0].uri;
+        const newMessage: Message = {
+          id: Date.now().toString(),
+          text: 'Video',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isBot: false,
+          delivered: true,
+          read: true,
+          imageUri: videoUri, // Using imageUri for videos too for simplicity
+        };
+        const updatedMessages = [...messages, newMessage];
+        setMessages(updatedMessages);
+        await saveMessages(updatedMessages);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to record video');
+    }
   };
 
   const handleVoice = () => {
-    // Handle voice message logic
-    console.log('Voice pressed');
+    if (recording) {
+      sendVoiceMessage();
+    } else {
+      startVoiceRecording();
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Microphone access is required to record voice messages');
+        return;
+      }
+      
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      
+      await rec.startAsync();
+      setRecording(rec);
+      
+      Alert.alert(
+        'Recording Voice Message',
+        'Recording... Tap the mic button again to stop and send.',
+        [{ text: 'Cancel', onPress: () => stopRecording(), style: 'cancel' }]
+      );
+    } catch (e) {
+      console.log('Recording error:', e);
+      Alert.alert('Error', 'Failed to start recording. Please check your microphone permissions.');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (recording) {
+      try {
+        await recording.stopAndUnloadAsync();
+        setRecording(null);
+      } catch (e) {
+        console.log('Stop recording error:', e);
+      }
+    }
+  };
+
+  const sendVoiceMessage = async () => {
+    try {
+      if (!recording) return;
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      const status = await recording.getStatusAsync();
+      const duration = (status as any).durationMillis ? Math.round((status as any).durationMillis / 1000) : undefined;
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        text: 'Voice message',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isBot: false,
+        delivered: true,
+        read: true,
+        isVoice: true,
+        audioUri: uri || undefined,
+        durationSeconds: duration,
+      };
+      const updated = [...messages, newMessage];
+      setMessages(updated);
+      await saveMessages(updated);
+      setRecording(null);
+    } catch (e) {
+      Alert.alert('Error','Failed to save voice message');
+    }
+  };
+
+  const togglePlayVoice = async (m: Message) => {
+    try {
+      if (!m.audioUri) return;
+      if (playingId === m.id) {
+        // stop
+        if (soundObj) {
+          await soundObj.stopAsync();
+          await soundObj.unloadAsync();
+          setSoundObj(null);
+        }
+        setPlayingId(null);
+        return;
+      }
+      if (soundObj) {
+        await soundObj.stopAsync();
+        await soundObj.unloadAsync();
+      }
+      const { sound } = await Audio.Sound.createAsync({ uri: m.audioUri }, { shouldPlay: true });
+      setSoundObj(sound);
+      setPlayingId(m.id);
+      sound.setOnPlaybackStatusUpdate((st: any) => {
+        if (st.didJustFinish) {
+          setPlayingId(null);
+          sound.unloadAsync();
+          setSoundObj(null);
+        }
+      });
+    } catch (e) {
+      Alert.alert('Error','Playback failed');
+    }
+  };
+
+  const onLongPressMessage = (m: Message) => {
+    setActionSheetMessage(m);
+  };
+
+  const copyMessage = async () => {
+    if (actionSheetMessage) {
+      await Clipboard.setStringAsync(actionSheetMessage.text);
+      Alert.alert('Copied','Message copied to clipboard');
+      setActionSheetMessage(null);
+    }
+  };
+
+  const toggleStar = async () => {
+    if (!actionSheetMessage) return;
+    const updated = messages.map(msg => msg.id === actionSheetMessage.id ? { ...msg, starred: !msg.starred } : msg);
+    setMessages(updated);
+    await saveMessages(updated);
+    setActionSheetMessage(null);
+  };
+
+  const deleteMessage = async () => {
+    if (!actionSheetMessage) return;
+    const updated = messages.filter(msg => msg.id !== actionSheetMessage.id);
+    setMessages(updated);
+    await saveMessages(updated);
+    setActionSheetMessage(null);
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[
+    <Pressable onLongPress={() => onLongPressMessage(item)} style={[
       styles.messageContainer,
-      item.isBot ? styles.botMessage : styles.userMessage
+      item.isBot ? styles.botMessage : styles.userMessage,
+      item.starred && { borderWidth:1, borderColor:'#FFD700' }
     ]}>
-      <Text style={[
-        styles.messageText,
-        item.isLink && styles.linkText
-      ]}>
-        {item.text}
-      </Text>
-      <Text style={styles.timestamp}>{item.timestamp}</Text>
-    </View>
+      {item.imageUri && !item.text.startsWith('📋') ? (
+        <TouchableOpacity onPress={() => {
+          console.log('Opening main image:', item.imageUri);
+          setViewingImage(item.imageUri!);
+        }}>
+          <View style={styles.mediaMessage}>
+            <Image source={{ uri: item.imageUri }} style={styles.messageImage} />
+            {item.text ? (
+              <View style={styles.mediaCaption}>
+                <Text style={styles.mediaCaptionText}>{item.text}</Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      ) : item.isVoice ? (
+        <View style={styles.voiceMessage}>
+          <TouchableOpacity onPress={() => togglePlayVoice(item)}>
+            <Ionicons name={playingId === item.id ? 'pause-circle' : 'play-circle'} size={24} color="#007AFF" />
+          </TouchableOpacity>
+          <View style={styles.voiceWaveform}>
+            <View style={styles.waveformBars}>
+              {[...Array(8)].map((_, i) => (
+                <View key={i} style={[styles.waveformBar, { height: Math.random() * 20 + 5 }]} />
+              ))}
+            </View>
+          </View>
+          <Text style={styles.voiceDuration}>{item.durationSeconds ?? 0}s</Text>
+        </View>
+      ) : (
+        <>
+          {!!item.text && (
+            <Text style={[
+              styles.messageText,
+              item.isLink && styles.linkText
+            ]}>
+              {item.text}
+            </Text>
+          )}
+          {item.attachments && item.attachments.length > 0 && (
+            <View style={styles.attachmentsContainer}>
+              {item.attachments.map((attachment, index) => (
+                <TouchableOpacity 
+                  key={index}
+                  style={styles.attachmentItem}
+                  onPress={() => {
+                    if (attachment.type.startsWith('image/') && attachment.uri) {
+                      console.log('Opening image:', attachment.uri);
+                      setViewingImage(attachment.uri);
+                    } else if (attachment.uri) {
+                      Linking.openURL(attachment.uri).catch(() => {
+                        Alert.alert('Error', `Cannot open ${attachment.name}`);
+                      });
+                    } else {
+                      Alert.alert('Error', 'File not available');
+                    }
+                  }}
+                >
+                  {attachment.type.startsWith('image/') && attachment.uri ? (
+                    <View style={styles.attachmentImageContainer}>
+                      <Image 
+                        source={{ uri: attachment.uri }} 
+                        style={styles.attachmentThumbnail}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.attachmentImageOverlay}>
+                        <Ionicons name="expand" size={16} color="#fff" />
+                      </View>
+                    </View>
+                  ) : (
+                    <Ionicons 
+                      name="document" 
+                      size={20} 
+                      color="#007AFF" 
+                    />
+                  )}
+                  <Text style={styles.attachmentName}>{attachment.name}</Text>
+                  <Ionicons name={attachment.type.startsWith('image/') ? 'eye' : 'download'} size={16} color="#007AFF" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </>
+      )}
+      <View style={styles.messageFooter}>
+        <Text style={styles.timestamp}>{item.timestamp}</Text>
+        {!item.isBot && (
+          <View style={styles.ticksContainer}>
+            <Ionicons 
+              name="checkmark-done" 
+              size={16} 
+              color={item.read ? "#4FC3F7" : "#8E8E93"} 
+            />
+          </View>
+        )}
+      </View>
+    </Pressable>
   );
 
   const handleQuickAction = (action: string) => {
     console.log(`${action} pressed`);
     setShowQuickActions(false); // Hide the panel after selection
+    
+    if (action === 'Form') {
+      // Navigate to Home screen (WhatsApp Business Form Page) to choose form
+      navigation.navigate('Home', {
+        chatId: chatId,
+        chatName: displayName,
+      });
+    }
   };
 
   const renderQuickActions = () => (
     <View style={styles.quickActionsContainer}>
       <View style={styles.quickActionsGrid}>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Document')}>
-          <Ionicons name="document-text" size={24} color="#007AFF" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#E3F2FD' }]}>
+            <Ionicons name="document-text" size={28} color="#007AFF" />
+          </View>
           <Text style={styles.quickActionText}>Document</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Camera')}>
-          <Ionicons name="camera" size={24} color="#FF3B30" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#FFEBEE' }]}>
+            <Ionicons name="camera" size={28} color="#FF3B30" />
+          </View>
           <Text style={styles.quickActionText}>Camera</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Gallery')}>
-          <Ionicons name="images" size={24} color="#34C759" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#E8F5E8' }]}>
+            <Ionicons name="images" size={28} color="#34C759" />
+          </View>
           <Text style={styles.quickActionText}>Gallery</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Audio')}>
-          <Ionicons name="headset" size={24} color="#FF9500" />
-          <Text style={styles.quickActionText}>Audio</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.quickActionsGrid}>
+        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Audio')}>
+          <View style={[styles.quickActionIcon, { backgroundColor: '#FFF3E0' }]}>
+            <Ionicons name="headset" size={28} color="#FF9500" />
+          </View>
+          <Text style={styles.quickActionText}>Audio</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Catalog')}>
-          <Ionicons name="grid" size={24} color="#8E8E93" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#F5F5F5' }]}>
+            <Ionicons name="grid" size={28} color="#8E8E93" />
+          </View>
           <Text style={styles.quickActionText}>Catalog</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Quick Reply')}>
-          <Ionicons name="flash" size={24} color="#FFCC02" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#FFFDE7' }]}>
+            <Ionicons name="flash" size={28} color="#FFCC02" />
+          </View>
           <Text style={styles.quickActionText}>Quick Reply</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Location')}>
-          <Ionicons name="location" size={24} color="#10DC60" />
-          <Text style={styles.quickActionText}>Location</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Contact')}>
-          <Ionicons name="person" size={24} color="#007AFF" />
-          <Text style={styles.quickActionText}>Contact</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.quickActionsGrid}>
+        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Location')}>
+          <View style={[styles.quickActionIcon, { backgroundColor: '#E8F5E8' }]}>
+            <Ionicons name="location" size={28} color="#10DC60" />
+          </View>
+          <Text style={styles.quickActionText}>Location</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Contact')}>
+          <View style={[styles.quickActionIcon, { backgroundColor: '#E3F2FD' }]}>
+            <Ionicons name="person" size={28} color="#007AFF" />
+          </View>
+          <Text style={styles.quickActionText}>Contact</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Poll')}>
-          <Ionicons name="bar-chart" size={24} color="#FF9500" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#FFF3E0' }]}>
+            <Ionicons name="bar-chart" size={28} color="#FF9500" />
+          </View>
           <Text style={styles.quickActionText}>Poll</Text>
         </TouchableOpacity>
+      </View>
+      <View style={styles.quickActionsGrid}>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Event')}>
-          <Ionicons name="calendar" size={24} color="#FF3B30" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#FFEBEE' }]}>
+            <Ionicons name="calendar" size={28} color="#FF3B30" />
+          </View>
           <Text style={styles.quickActionText}>Event</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('Form')}>
-          <Ionicons name="clipboard" size={24} color="#10DC60" />
+          <View style={[styles.quickActionIcon, { backgroundColor: '#E8F5E8' }]}>
+            <Ionicons name="clipboard" size={28} color="#10DC60" />
+          </View>
           <Text style={styles.quickActionText}>Form</Text>
         </TouchableOpacity>
+        <View style={styles.quickAction}>
+          {/* Empty space for better alignment */}
+        </View>
       </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <>
+      <StatusBar backgroundColor="#25D366" barStyle="light-content" />
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        {/* Header */}
+        <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => navigation.navigate('Chat')}
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -249,12 +788,12 @@ const ChatConversationScreen = ({ route }: any) => {
               />
             ) : (
               <View style={[styles.avatarCircle, { backgroundColor: getAvatarColor(chatId) }]}>
-                <Text style={styles.avatarText}>{getInitials(chatName)}</Text>
+                <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
               </View>
             )}
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{chatName}</Text>
+            <Text style={styles.userName} numberOfLines={1} ellipsizeMode="tail">{displayName}</Text>
             <Text style={styles.userStatus}>online</Text>
           </View>
         </View>
@@ -286,8 +825,10 @@ const ChatConversationScreen = ({ route }: any) => {
       {/* Input Area */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.inputContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        style={styles.keyboardAvoidingView}
       >
+        <View style={styles.inputContainer}>
         <View style={styles.inputRow}>
           <TouchableOpacity style={styles.attachButton} onPress={handleAttachment}>
             <Ionicons name="attach" size={24} color="#8E8E93" />
@@ -310,13 +851,71 @@ const ChatConversationScreen = ({ route }: any) => {
               <Ionicons name="send" size={20} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.voiceButton} onPress={handleVoice}>
-              <Ionicons name="mic" size={24} color="#fff" />
+            <TouchableOpacity style={[styles.voiceButton, recording && styles.recordingButton]} onPress={handleVoice}>
+              <Ionicons name={recording ? "stop" : "mic"} size={24} color="#fff" />
             </TouchableOpacity>
           )}
         </View>
+        </View>
       </KeyboardAvoidingView>
+
+      {/* Image Viewer Modal */}
+      <Modal
+        visible={viewingImage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingImage(null)}
+        statusBarTranslucent={true}
+        onShow={() => console.log('Modal shown, viewing image:', viewingImage)}
+      >
+        <View style={styles.imageViewerOverlay}>
+          <StatusBar backgroundColor="rgba(0,0,0,0.9)" barStyle="light-content" />
+          <TouchableOpacity 
+            style={styles.imageViewerClose} 
+            onPress={() => setViewingImage(null)}
+          >
+            <Ionicons name="close" size={32} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.imageViewerContainer}>
+            {viewingImage && (
+              <>
+                {viewingImageLoading && (
+                  <View style={styles.imageViewerLoadingWrapper}>
+                    <Text style={styles.imageViewerLoadingText}>Loading...</Text>
+                  </View>
+                )}
+                <Image
+                  source={{ uri: viewingImage }}
+                  style={styles.imageViewerImage}
+                  resizeMode="contain"
+                  onLoadStart={() => setViewingImageLoading(true)}
+                  onLoad={() => setViewingImageLoading(false)}
+                  onError={(e) => {
+                    console.log('Image load error:', e);
+                    setViewingImageLoading(false);
+                    Alert.alert('Error','Failed to load image');
+                    setViewingImage(null);
+                  }}
+                />
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {actionSheetMessage && (
+        <View style={styles.actionSheetOverlay}>
+          <View style={styles.actionSheet}>
+            <Text style={styles.actionSheetTitle}>Message actions</Text>
+            <TouchableOpacity style={styles.actionSheetBtn} onPress={copyMessage}><Ionicons name="copy" size={18} color="#007AFF" /><Text style={styles.actionSheetBtnText}>Copy</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.actionSheetBtn} onPress={toggleStar}><Ionicons name={actionSheetMessage.starred ? 'star' : 'star-outline'} size={18} color="#FFB300" /><Text style={styles.actionSheetBtnText}>{actionSheetMessage.starred ? 'Unstar' : 'Star'}</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.actionSheetBtn} onPress={deleteMessage}><Ionicons name="trash" size={18} color="#FF3B30" /><Text style={[styles.actionSheetBtnText,{color:'#FF3B30'}]}>Delete</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.actionSheetCancel} onPress={()=>setActionSheetMessage(null)}><Text style={styles.actionSheetCancelText}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
+    </>
   );
 };
 
@@ -324,14 +923,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#E5DDD5',
+    margin: 0,
+    padding: 0,
   },
   header: {
-    backgroundColor: '#075E54',
+    backgroundColor: '#25D366',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 50,
+    width: '100%',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
   },
   backButton: {
     marginRight: 12,
@@ -340,6 +949,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    minWidth: 0,
   },
   avatar: {
     width: 40,
@@ -347,6 +957,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 12,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   avatarImage: {
     width: '100%',
@@ -354,15 +966,18 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   userName: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+    flexShrink: 1,
   },
   userStatus: {
-    color: '#B3E5FC',
+    color: '#fff',
     fontSize: 14,
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',
@@ -395,16 +1010,25 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     color: '#000',
-    marginBottom: 4,
+    lineHeight: 20,
   },
   linkText: {
     color: '#007AFF',
     textDecorationLine: 'underline',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
   timestamp: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#8E8E93',
-    alignSelf: 'flex-end',
+    marginRight: 4,
+  },
+  ticksContainer: {
+    marginLeft: 2,
   },
   quickActionsContainer: {
     backgroundColor: '#fff',
@@ -416,26 +1040,44 @@ const styles = StyleSheet.create({
   quickActionsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   quickAction: {
     alignItems: 'center',
     flex: 1,
+    paddingVertical: 8,
+  },
+  quickActionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   quickActionText: {
     fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 4,
+    color: '#000',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  keyboardAvoidingView: {
+    backgroundColor: 'transparent',
   },
   inputContainer: {
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    minHeight: Platform.OS === 'ios' ? 80 : 60,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingVertical: 8,
+    paddingBottom: 8,
+    minHeight: 44,
   },
   attachButton: {
     marginRight: 8,
@@ -444,23 +1086,25 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flex: 1,
     backgroundColor: '#F2F2F7',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginRight: 8,
-    maxHeight: 100,
+    minHeight: 36,
+    maxHeight: 80,
   },
   textInput: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#000',
-    minHeight: 20,
+    minHeight: 24,
+    paddingVertical: 0,
   },
   cameraButton: {
     marginRight: 8,
     padding: 8,
   },
   sendButton: {
-    backgroundColor: '#075E54',
+    backgroundColor: '#25D366',
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -468,12 +1112,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   voiceButton: {
-    backgroundColor: '#075E54',
+    backgroundColor: '#25D366',
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  recordingButton: {
+    backgroundColor: '#FF3B30',
   },
   avatarCircle: {
     width: 40,
@@ -481,11 +1128,191 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   avatarText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  mediaMessage: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    maxWidth: 200,
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+  },
+  mediaCaption: {
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  mediaCaptionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  voiceMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 150,
+  },
+  voiceWaveform: {
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  waveformBars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 20,
+  },
+  waveformBar: {
+    width: 2,
+    backgroundColor: '#007AFF',
+    borderRadius: 1,
+  },
+  voiceDuration: {
+    fontSize: 12,
+    color: '#8E8E93',
+    minWidth: 25,
+    textAlign: 'right',
+  },
+  attachmentsContainer: {
+    marginTop: 8,
+    gap: 6,
+  },
+  attachmentsTitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+    padding: 8,
+    borderRadius: 8,
+    gap: 8,
+  },
+  attachmentName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#007AFF',
+    textDecorationLine: 'underline',
+  },
+  attachmentImageContainer: {
+    position: 'relative',
+  },
+  attachmentThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+  },
+  attachmentImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionSheetOverlay:{
+    position:'absolute',
+    top:0,left:0,right:0,bottom:0,
+    backgroundColor:'rgba(0,0,0,0.4)',
+    justifyContent:'flex-end'
+  },
+  actionSheet:{
+    backgroundColor:'#fff',
+    padding:20,
+    paddingBottom:30,
+    borderTopLeftRadius:16,
+    borderTopRightRadius:16,
+    minHeight:200,
+  },
+  actionSheetTitle:{
+    fontSize:18,
+    fontWeight:'600',
+    marginBottom:20,
+    textAlign:'center',
+    color:'#000'
+  },
+  actionSheetBtn:{
+    flexDirection:'row',
+    alignItems:'center',
+    paddingVertical:15,
+    paddingHorizontal:5,
+    gap:12,
+    minHeight:50,
+  },
+  actionSheetBtnText:{
+    fontSize:16,
+    color:'#000',
+    fontWeight:'500',
+  },
+  actionSheetCancel:{
+    marginTop:15,
+    paddingVertical:15,
+    alignItems:'center',
+    borderTopWidth:1,
+    borderTopColor:'#E5E5EA'
+  },
+  actionSheetCancelText:{
+    fontSize:16,
+    color:'#007AFF',
+    fontWeight:'600'
+  },
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 24,
+  },
+  imageViewerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  imageViewerImage: {
+    width: '100%',
+    height: '85%',
+  },
+  imageViewerLoadingWrapper: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  imageViewerLoadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

@@ -110,7 +110,7 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
       }))
     };
 
-    console.log('Custom form config:', formConfig);
+
 
     // Store the form configuration and navigate
     navigation.navigate('Form', {
@@ -267,7 +267,13 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.bottomButtons}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }}
         >
           <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>

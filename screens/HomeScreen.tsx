@@ -11,7 +11,8 @@ interface Props {
   navigation: HomeScreenNavigationProp;
 }
 
-const HomeScreen: React.FC<Props> = ({ navigation }) => {
+const HomeScreen: React.FC<Props> = ({ navigation, route }: any) => {
+  const { chatId, chatName } = route?.params || {};
   const formTemplates = [
     {
       id: 'customer-details',
@@ -49,22 +50,67 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
     } else if (templateId === 'custom-form') {
       navigation.navigate('CustomFormBuilder');
     } else {
-      navigation.navigate('Form', {
-        templateId,
-        templateName,
-      });
+      if (chatId && chatName) {
+        // If we have chat context, reset the stack to go directly to form
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'Form',
+              params: {
+                templateId,
+                templateName,
+                chatId,
+                chatName,
+              }
+            }
+          ],
+        });
+      } else {
+        navigation.navigate('Form', {
+          templateId,
+          templateName,
+          chatId,
+          chatName,
+        });
+      }
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header with Logo */}
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Ionicons name="logo-whatsapp" size={48} color="white" />
+          <View style={styles.headerTop}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => {
+                if (chatId && chatName) {
+                  // If we came from a chat, go directly back to that chat
+                  navigation.reset({
+                    index: 0,
+                    routes: [
+                      {
+                        name: 'ChatConversation',
+                        params: {
+                          chatId: chatId,
+                          chatName: chatName,
+                        }
+                      }
+                    ],
+                  });
+                } else if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  console.log('Already at home screen');
+                }
+              }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.title}>WhatsApp Business Form</Text>
           </View>
-          <Text style={styles.title}>WhatsApp Business Form</Text>
           <Text style={styles.subtitle}>Choose a form to get started</Text>
         </View>
 
@@ -96,88 +142,72 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#fff',
   },
   scrollContent: {
     paddingBottom: 40,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 50,
     paddingBottom: 40,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#25d366',
-    justifyContent: 'center',
+  headerTop: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: '#25d366',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 12,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    flex: 1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: '#8E8E93',
+    paddingHorizontal: 48, // Align with the title text
   },
   formsContainer: {
-    paddingHorizontal: 24,
-    gap: 16,
+    paddingHorizontal: 20,
+    gap: 0,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E5EA',
   },
   formCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
+    backgroundColor: '#fff',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
   },
   iconContainer: {
-    width: 48,
-    height: 48,
+    width: 56,
+    height: 56,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 20,
   },
   formContent: {
     flex: 1,
   },
   formTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#000',
     marginBottom: 4,
   },
   formDescription: {
     fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
+    color: '#8E8E93',
+    lineHeight: 18,
   },
 });
 
