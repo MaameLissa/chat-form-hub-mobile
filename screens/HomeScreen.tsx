@@ -50,30 +50,13 @@ const HomeScreen: React.FC<Props> = ({ navigation, route }: any) => {
     } else if (templateId === 'custom-form') {
       navigation.navigate('CustomFormBuilder');
     } else {
-      if (chatId && chatName) {
-        // If we have chat context, reset the stack to go directly to form
-        navigation.reset({
-          index: 0,
-          routes: [
-            {
-              name: 'Form',
-              params: {
-                templateId,
-                templateName,
-                chatId,
-                chatName,
-              }
-            }
-          ],
-        });
-      } else {
-        navigation.navigate('Form', {
-          templateId,
-          templateName,
-          chatId,
-          chatName,
-        });
-      }
+      // Always navigate so Home remains in the stack and the Form screen shows a back arrow
+      navigation.navigate('Form', {
+        templateId,
+        templateName,
+        chatId,
+        chatName,
+      });
     }
   };
 

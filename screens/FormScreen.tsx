@@ -691,21 +691,9 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
             style={styles.backButton} 
             onPress={() => {
               if (chatId && chatName) {
-                // Reset navigation stack and go directly back to chat
-                navigation.reset({
-                  index: 0,
-                  routes: [
-                    {
-                      name: 'ChatConversation',
-                      params: {
-                        chatId: chatId,
-                        chatName: chatName,
-                      }
-                    }
-                  ],
-                });
+                // Always return to Forms Home, preserving chat context if provided
+                navigation.navigate('Home', { chatId, chatName });
               } else {
-                // Otherwise go to Home
                 navigation.navigate('Home');
               }
             }}

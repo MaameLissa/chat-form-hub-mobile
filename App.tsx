@@ -21,6 +21,7 @@ import SelectContactScreen from './screens/SelectContactScreen';
 import CallsScreen from './screens/CallsScreen';
 import UpdatesScreen from './screens/UpdatesScreen';
 import ToolsScreen from './screens/ToolsScreen';
+import MetaAIScreen from './screens/MetaAIScreen';
 import { RootStackParamList } from './types/navigation';
 import { FormProvider } from './context/FormContext';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -170,6 +171,16 @@ export default function App() {
                 name="Tools" 
                 component={ToolsScreen} 
                 options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="MetaAI" 
+                component={MetaAIScreen} 
+                options={{ 
+                  title: 'Meta AI',
+                  headerStyle: { backgroundColor: '#25d366' },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: { fontWeight: '600', fontSize: 18, color: '#fff' },
+                }}
               />
             </Stack.Navigator>
             </NavigationContainer>

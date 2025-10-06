@@ -41,6 +41,7 @@ export type RootStackParamList = {
   Updates: undefined;
   Tools: undefined;
   ChatStack?: undefined;
+  MetaAI: undefined; // added
 };
 
 export interface FormField {
