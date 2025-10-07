@@ -25,7 +25,7 @@ const ToolsScreen = () => {
     } else if (toolName === 'Form Builder') {
       navigation.navigate('CustomFormBuilder');
     } else if (toolName === 'Submitted Forms') {
-      navigation.navigate('SubmittedForms');
+      navigation.navigate('Dashboard');
     } else {
       Alert.alert(toolName, `${toolName} feature coming soon!`);
     }

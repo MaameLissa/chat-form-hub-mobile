@@ -36,6 +36,7 @@ export type RootStackParamList = {
   SelectContact: {
     forwardData?: SubmittedForm[];
     fromDashboard?: boolean;
+    fromForm?: boolean;
   } | undefined;
   Calls: undefined;
   Updates: undefined;

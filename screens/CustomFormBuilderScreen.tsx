@@ -43,6 +43,8 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
   ]);
   const [showTypeDropdown, setShowTypeDropdown] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<Record<string, string>>({});
 
   const addField = () => {
     const newField: FormField = {
@@ -89,6 +91,15 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
     ));
   };
 
+  const handlePreview = () => {
+    if (fields.length === 0) {
+      Alert.alert('No Fields', 'Please add at least one field to preview your form.');
+      return;
+    }
+    setPreviewData({});
+    setShowPreview(true);
+  };
+
   const handleUseForm = () => {
     // Validate that we have at least one field
     if (fields.length === 0) {
@@ -109,8 +120,6 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
         options: field.options,
       }))
     };
-
-
 
     // Store the form configuration and navigate
     navigation.navigate('Form', {
@@ -279,12 +288,128 @@ const CustomFormBuilderScreen: React.FC<Props> = ({ navigation }) => {
         </TouchableOpacity>
         
         <TouchableOpacity
+          style={styles.previewButton}
+          onPress={handlePreview}
+        >
+          <Text style={styles.previewButtonText}>Preview</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
           style={styles.useFormButton}
           onPress={handleUseForm}
         >
           <Text style={styles.useFormButtonText}>Use This Form</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Preview Modal */}
+      <Modal
+        visible={showPreview}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPreview(false)}
+      >
+        <SafeAreaView style={styles.previewModal}>
+          <View style={styles.previewHeader}>
+            <Text style={styles.previewTitle}>Form Preview</Text>
+            <TouchableOpacity onPress={() => setShowPreview(false)} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.previewContent}>
+            <View style={styles.previewFormContainer}>
+              <Text style={styles.previewFormTitle}>Custom Form</Text>
+              <Text style={styles.previewFormSubtitle}>Fill out your custom form</Text>
+              
+              {fields.map((field, index) => (
+                <View key={index} style={styles.previewFieldContainer}>
+                  <Text style={styles.previewFieldLabel}>
+                    {field.label}
+                    {field.required && <Text style={styles.requiredMark}> *</Text>}
+                  </Text>
+                  
+                  {field.type === 'textarea' ? (
+                    <TextInput
+                      style={[styles.previewTextInput, styles.previewTextArea]}
+                      placeholder={field.placeholder}
+                      multiline
+                      numberOfLines={4}
+                      value={previewData[field.label] || ''}
+                      onChangeText={(text) => setPreviewData(prev => ({...prev, [field.label]: text}))}
+                    />
+                  ) : field.type === 'select' ? (
+                    <View style={styles.previewSelectContainer}>
+                      <Text style={styles.previewSelectPlaceholder}>
+                        {previewData[field.label] || field.placeholder || 'Select an option'}
+                      </Text>
+                      <TouchableOpacity 
+                        style={styles.previewSelectButton}
+                        onPress={() => {
+                          Alert.alert(
+                            'Select Option',
+                            'Choose an option:',
+                            field.options?.map(option => ({
+                              text: option,
+                              onPress: () => setPreviewData(prev => ({...prev, [field.label]: option}))
+                            })) || []
+                          );
+                        }}
+                      >
+                        <Text style={styles.previewSelectText}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : field.type === 'file' ? (
+                    <TouchableOpacity 
+                      style={styles.previewFileButton}
+                      onPress={() => {
+                        setPreviewData(prev => ({...prev, [field.label]: 'sample_file.pdf'}));
+                        Alert.alert('Preview Mode', 'File selection simulated in preview mode.');
+                      }}
+                    >
+                      <Text style={styles.previewFileButtonText}>
+                        {previewData[field.label] ? 'File Selected: ' + previewData[field.label] : 'Choose File'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : field.type === 'date' ? (
+                    <TouchableOpacity 
+                      style={styles.previewDateButton}
+                      onPress={() => {
+                        const today = new Date().toDateString();
+                        setPreviewData(prev => ({...prev, [field.label]: today}));
+                      }}
+                    >
+                      <Text style={styles.previewDateButtonText}>
+                        {previewData[field.label] || 'Select Date'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TextInput
+                      style={styles.previewTextInput}
+                      placeholder={field.placeholder}
+                      value={previewData[field.label] || ''}
+                      onChangeText={(text) => setPreviewData(prev => ({...prev, [field.label]: text}))}
+                      keyboardType={
+                        field.type === 'email' ? 'email-address' :
+                        field.type === 'phone' ? 'phone-pad' : 'default'
+                      }
+                    />
+                  )}
+                </View>
+              ))}
+              
+              <View style={styles.previewSubmitContainer}>
+                <TouchableOpacity 
+                  style={styles.previewSubmitButton}
+                  onPress={() => Alert.alert('Preview Mode', 'This is a preview. The form is not actually submitted. All validation and submission logic would work normally in live mode.')}
+                >
+                  <Text style={styles.previewSubmitText}>Submit Form (Preview)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -487,7 +612,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
-    gap: 12,
+    gap: 8,
   },
   backButton: {
     paddingVertical: 14,
@@ -509,7 +634,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 10,
     backgroundColor: '#10b981',
-    flex: 2,
+    flex: 1.5,
     alignItems: 'center',
     shadowColor: '#10b981',
     shadowOffset: {
@@ -522,6 +647,181 @@ const styles = StyleSheet.create({
   },
   useFormButtonText: {
     fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  previewButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#3b82f6',
+    flex: 1.5,
+    alignItems: 'center',
+    marginHorizontal: 6,
+    shadowColor: '#3b82f6',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  previewButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  previewModal: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  closeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  previewContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  previewFormContainer: {
+    paddingVertical: 20,
+  },
+  previewFormTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  previewFormSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  previewFieldContainer: {
+    marginBottom: 20,
+  },
+  previewFieldLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  requiredMark: {
+    color: '#ef4444',
+  },
+  previewTextInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  previewTextArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  previewSelectContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  previewSelectPlaceholder: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  previewSelectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewSelectText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  previewFileButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  previewFileButtonText: {
+    fontSize: 16,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  previewDateButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  previewDateButtonText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  previewSubmitContainer: {
+    marginTop: 32,
+    marginBottom: 20,
+  },
+  previewSubmitButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    alignItems: 'center',
+    shadowColor: '#10b981',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  previewSubmitText: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
   },

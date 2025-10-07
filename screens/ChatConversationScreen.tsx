@@ -14,6 +14,7 @@ import {
   StatusBar,
   Pressable,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -155,7 +156,11 @@ const ChatConversationScreen = ({ route }: any) => {
   }, [chatId]);
 
   useEffect(() => {
-    if (formData && formType) {
+    // Only add form message if it came from route params and wasn't already persisted
+    if (formData && formType && !messages.some(msg => 
+      msg.text.includes(`📋 ${formType}`) && 
+      msg.timestamp === new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    )) {
       // Create a form message when form data is received
       addFormMessage(formData, formType, fileData);
     }
@@ -172,7 +177,7 @@ const ChatConversationScreen = ({ route }: any) => {
         }, index * 500); // Stagger the messages by 500ms
       });
     }
-  }, [formData, formType, fileData, dashboardResponses]);
+  }, [formData, formType, fileData, dashboardResponses, messages]);
 
   useEffect(() => {
     return () => {
@@ -279,14 +284,35 @@ const ChatConversationScreen = ({ route }: any) => {
     const updatedMessages = [...messages, formMessage];
     setMessages(updatedMessages);
     await saveMessages(updatedMessages);
+    
+    // Update the chat list with the form message
+    await updateChatLastMessage(`📋 ${formType} submitted`, formMessage.timestamp);
+  };
+
+  const updateChatLastMessage = async (messageText: string, timestamp: string) => {
+    try {
+      const storedChats = await AsyncStorage.getItem('chats');
+      if (storedChats) {
+        const chats = JSON.parse(storedChats);
+        const updatedChats = chats.map((chat: any) => 
+          chat.id === chatId 
+            ? { ...chat, lastMessage: messageText, timestamp: timestamp }
+            : chat
+        );
+        await AsyncStorage.setItem('chats', JSON.stringify(updatedChats));
+      }
+    } catch (error) {
+      console.log('Error updating chat list:', error);
+    }
   };
 
   const handleSend = async () => {
     if (message.trim()) {
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const newMessage: Message = {
         id: Date.now().toString(),
         text: message.trim(),
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: timestamp,
         isBot: false,
         delivered: true,
         read: true,
@@ -294,6 +320,10 @@ const ChatConversationScreen = ({ route }: any) => {
       const updatedMessages = [...messages, newMessage];
       setMessages(updatedMessages);
       await saveMessages(updatedMessages);
+      
+      // Update the chat list with the latest message
+      await updateChatLastMessage(message.trim(), timestamp);
+      
       setMessage('');
     }
   };
@@ -334,10 +364,11 @@ const ChatConversationScreen = ({ route }: any) => {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newMessage: Message = {
           id: Date.now().toString(),
           text: 'Photo',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: timestamp,
           isBot: false,
           delivered: true,
           read: true,
@@ -346,6 +377,7 @@ const ChatConversationScreen = ({ route }: any) => {
         const updatedMessages = [...messages, newMessage];
         setMessages(updatedMessages);
         await saveMessages(updatedMessages);
+        await updateChatLastMessage('📷 Photo', timestamp);
       }
     } catch (error) {
       console.error('Photo capture error:', error);
@@ -373,10 +405,12 @@ const ChatConversationScreen = ({ route }: any) => {
       if (!result.canceled && result.assets && result.assets[0]) {
         const mediaUri = result.assets[0].uri;
         const mediaType = result.assets[0].type || 'image';
+        const messageText = mediaType.startsWith('video') ? 'Video' : 'Photo';
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newMessage: Message = {
           id: Date.now().toString(),
-          text: mediaType.startsWith('video') ? 'Video' : 'Photo',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          text: messageText,
+          timestamp: timestamp,
           isBot: false,
           delivered: true,
           read: true,
@@ -385,6 +419,7 @@ const ChatConversationScreen = ({ route }: any) => {
         const updatedMessages = [...messages, newMessage];
         setMessages(updatedMessages);
         await saveMessages(updatedMessages);
+        await updateChatLastMessage(mediaType.startsWith('video') ? '🎬 Video' : '📷 Photo', timestamp);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to select media from gallery');
@@ -410,10 +445,11 @@ const ChatConversationScreen = ({ route }: any) => {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const videoUri = result.assets[0].uri;
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const newMessage: Message = {
           id: Date.now().toString(),
           text: 'Video',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: timestamp,
           isBot: false,
           delivered: true,
           read: true,
@@ -422,6 +458,7 @@ const ChatConversationScreen = ({ route }: any) => {
         const updatedMessages = [...messages, newMessage];
         setMessages(updatedMessages);
         await saveMessages(updatedMessages);
+        await updateChatLastMessage('🎬 Video', timestamp);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to record video');
@@ -487,10 +524,11 @@ const ChatConversationScreen = ({ route }: any) => {
       const uri = recording.getURI();
       const status = await recording.getStatusAsync();
       const duration = (status as any).durationMillis ? Math.round((status as any).durationMillis / 1000) : undefined;
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const newMessage: Message = {
         id: Date.now().toString(),
         text: 'Voice message',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: timestamp,
         isBot: false,
         delivered: true,
         read: true,
@@ -501,6 +539,7 @@ const ChatConversationScreen = ({ route }: any) => {
       const updated = [...messages, newMessage];
       setMessages(updated);
       await saveMessages(updated);
+      await updateChatLastMessage('🎤 Voice message', timestamp);
       setRecording(null);
     } catch (e) {
       Alert.alert('Error','Failed to save voice message');
@@ -817,6 +856,9 @@ const ChatConversationScreen = ({ route }: any) => {
         keyExtractor={item => item.id}
         style={styles.messagesList}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       />
 
       {/* Quick Actions - Only show when attachment button is pressed */}
@@ -825,8 +867,9 @@ const ChatConversationScreen = ({ route }: any) => {
       {/* Input Area */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
         style={styles.keyboardAvoidingView}
+        enabled={true}
       >
         <View style={styles.inputContainer}>
         <View style={styles.inputRow}>

@@ -202,6 +202,30 @@ const SettingsScreen = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Bottom Tab Bar */}
+      <View style={styles.bottomTabBar}>
+        <TouchableOpacity style={styles.bottomTab} onPress={() => navigation.navigate('Chat')}>
+          <Ionicons name="chatbubble-ellipses" size={24} color="#8E8E93" />
+          <Text style={styles.bottomTabText}>Chats</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomTab} onPress={() => navigation.navigate('Calls')}>
+          <Ionicons name="call" size={24} color="#8E8E93" />
+          <Text style={styles.bottomTabText}>Calls</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomTab} onPress={() => navigation.navigate('Updates')}>
+          <Image source={require('../assets/updates.png')} style={styles.updatesIcon} />
+          <Text style={styles.bottomTabText}>Updates</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomTab} onPress={() => navigation.navigate('Tools')}>
+          <Image source={require('../assets/tools.png')} style={styles.toolsIcon} />
+          <Text style={styles.bottomTabText}>Tools</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.bottomTab}>
+          <Ionicons name="settings-outline" size={24} color="#25D366" />
+          <Text style={[styles.bottomTabText, styles.activeBottomTabText]}>Settings</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 };
@@ -335,6 +359,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#000',
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F8F8',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E5EA',
+    justifyContent: 'space-around',
+  },
+  bottomTab: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 60,
+  },
+  bottomTabText: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 4,
+  },
+  activeBottomTabText: {
+    color: '#25D366',
+  },
+  updatesIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  toolsIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#8E8E93',
   },
 });
 

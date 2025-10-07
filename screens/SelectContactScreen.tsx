@@ -24,9 +24,10 @@ interface Contact {
 
 type SelectContactScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
-const SelectContactScreen = () => {
+const SelectContactScreen = ({ route }: any) => {
   const navigation = useNavigation<SelectContactScreenNavigationProp>();
   const [searchQuery, setSearchQuery] = useState('');
+  const { forwardData, fromForm } = route?.params || {};
 
   const contacts: Contact[] = [
     {
@@ -124,7 +125,52 @@ const SelectContactScreen = () => {
           chats = [newChat, ...chats];
           await AsyncStorage.setItem('chats', JSON.stringify(chats));
         }
+
+        // If forwarding form data, send it to this chat
+        if (fromForm && forwardData && forwardData.length > 0) {
+          const formData = forwardData[0];
+          
+          // Format form message
+          let formText = `📋 ${formData.templateName} Submitted:\n\n`;
+          Object.keys(formData.data || {}).forEach(key => {
+            const value = formData.data[key];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+              const fieldName = key
+                .replace(/([A-Z])/g, ' $1')
+                .replace(/_/g, ' ')
+                .replace(/^./, str => str.toUpperCase());
+              formText += `${fieldName}: ${value}\n`;
+            }
+          });
+
+          // Create message object
+          const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const formMessage = {
+            id: Date.now().toString(),
+            text: formText.trim(),
+            timestamp: timestamp,
+            isBot: false,
+            delivered: true,
+            read: true,
+            attachments: formData.uploadedFiles || undefined,
+          };
+
+          // Save message to chat
+          const savedMessages = await AsyncStorage.getItem(`messages_${contact.id}`);
+          const messages = savedMessages ? JSON.parse(savedMessages) : [];
+          const updatedMessages = [...messages, formMessage];
+          await AsyncStorage.setItem(`messages_${contact.id}`, JSON.stringify(updatedMessages));
+
+          // Update chat list last message
+          const updatedChats = chats.map((chat: any) => 
+            chat.id === contact.id 
+              ? { ...chat, lastMessage: `📋 ${formData.templateName} submitted`, timestamp: timestamp }
+              : chat
+          );
+          await AsyncStorage.setItem('chats', JSON.stringify(updatedChats));
+        }
       } catch (e) { console.log('persist chat error', e); }
+      
       navigation.navigate('ChatConversation', { 
         chatId: contact.id, 
         chatName: contact.name.replace(/[~_👑🔥💯♻️]/g, '').trim()

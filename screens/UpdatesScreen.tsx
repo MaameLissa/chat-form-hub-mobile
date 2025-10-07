@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ type UpdatesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const UpdatesScreen = () => {
   const navigation = useNavigation<UpdatesScreenNavigationProp>();
+  const [showCustomFooter, setShowCustomFooter] = useState(false);
 
   const statusUpdates: StatusUpdate[] = [
     {

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootStackParamList, FormField } from '../types/navigation';
 import LocationPicker from '../components/LocationPicker';
 import { getFormConfig } from '../components/forms';
@@ -42,70 +43,114 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const [customFormName, setCustomFormName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [savedTemplates, setSavedTemplates] = useState(() => {
-    // Service Booking templates
-    if (templateId === 'service-booking') {
-      return [
-        {
-          id: '1',
-          name: 'Installation Service',
-          createdDate: '23/09/25',
-          data: {
-            name: 'Michael Brown',
-            phone: '+233 024 567 890',
-            service_type: 'Installation',
-            preferred_date: '10/15/2025',
-            description: 'Air conditioning unit installation for residential property'
-          }
-        },
-        {
-          id: '2', 
-          name: 'Monthly Maintenance',
-          createdDate: '25/09/25',
-          data: {
-            name: 'Jennifer Wilson',
-            phone: '+233 055 123 456',
-            service_type: 'Maintenance',
-            preferred_date: '10/20/2025',
-            description: 'Regular monthly maintenance check for HVAC system'
-          }
-        }
-      ];
-    }
-    
-    // Customer Details templates (original templates)
-    if (templateId === 'customer-details') {
-      return [
-        {
-          id: '1',
-          name: 'Regular Customer - Clothing',
-          createdDate: '23/09/25',
-          data: {
-            name: 'John Smith',
-            phone: '+233 024 567 890',
-            items: 'T-shirts, Jeans, Sneakers',
-            delivery_address: '123 Osu Street, Accra, Ghana',
-            additional_instructions: 'Call before delivery'
-          }
-        },
-        {
-          id: '2', 
-          name: 'Express Delivery Order',
-          createdDate: '25/09/25',
-          data: {
-            name: 'Sarah Johnson',
-            phone: '+233 055 123 456',
-            items: 'Electronics, Headphones',
-            delivery_address: '456 East Legon, Accra, Ghana',
-            additional_instructions: 'Urgent delivery needed'
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Keyboard listeners
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
+  }, []);
+
+  // Load saved templates from AsyncStorage on component mount
+  useEffect(() => {
+    const loadSavedTemplates = async () => {
+      try {
+        const storedTemplates = await AsyncStorage.getItem(`saved-templates-${templateId}`);
+        if (storedTemplates) {
+          setSavedTemplates(JSON.parse(storedTemplates));
+        } else {
+          // Set default templates if none exist
+          const defaultTemplates = getDefaultTemplates();
+          setSavedTemplates(defaultTemplates);
+          if (defaultTemplates.length > 0) {
+            await AsyncStorage.setItem(`saved-templates-${templateId}`, JSON.stringify(defaultTemplates));
           }
         }
-      ];
-    }
-    
-    // Default empty array for other forms
-    return [];
-  });
+      } catch (error) {
+        console.error('Error loading saved templates:', error);
+        setSavedTemplates(getDefaultTemplates());
+      }
+    };
+
+    const getDefaultTemplates = () => {
+      // Service Booking templates
+      if (templateId === 'service-booking') {
+        return [
+          {
+            id: '1',
+            name: 'Installation Service',
+            createdDate: '23/09/25',
+            data: {
+              name: 'Michael Brown',
+              phone: '+233 024 567 890',
+              service_type: 'Installation',
+              preferred_date: '10/15/2025',
+              description: 'Air conditioning unit installation for residential property'
+            }
+          },
+          {
+            id: '2', 
+            name: 'Monthly Maintenance',
+            createdDate: '25/09/25',
+            data: {
+              name: 'Jennifer Wilson',
+              phone: '+233 055 123 456',
+              service_type: 'Maintenance',
+              preferred_date: '10/20/2025',
+              description: 'Regular monthly maintenance check for HVAC system'
+            }
+          }
+        ];
+      }
+      
+      // Customer Details templates (original templates)
+      if (templateId === 'customer-details') {
+        return [
+          {
+            id: '1',
+            name: 'Regular Customer - Clothing',
+            createdDate: '23/09/25',
+            data: {
+              name: 'John Smith',
+              phone: '+233 024 567 890',
+              items: 'T-shirts, Jeans, Sneakers',
+              delivery_address: '123 Osu Street, Accra, Ghana',
+              additional_instructions: 'Call before delivery'
+            }
+          },
+          {
+            id: '2', 
+            name: 'Express Delivery Order',
+            createdDate: '25/09/25',
+            data: {
+              name: 'Sarah Johnson',
+              phone: '+233 055 123 456',
+              items: 'Electronics, Headphones',
+              delivery_address: '456 East Legon, Accra, Ghana',
+              additional_instructions: 'Urgent delivery needed'
+            }
+          }
+        ];
+      }
+      
+      // Default empty array for other forms
+      return [];
+    };
+
+    loadSavedTemplates();
+  }, [templateId]);
 
   // Get form configuration from separate files or use custom config
   const { formConfig, fields, formTitle, formSubtitle } = useMemo(() => {
@@ -307,6 +352,11 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         uploadedFiles,
       });
 
+      // If we have a chatId, persist the form message directly to chat
+      if (chatId) {
+        await persistFormToChat(finalFormName, chatId);
+      }
+
       // Show success modal
       setShowSubmitSuccessModal(true);
     } catch (error) {
@@ -334,29 +384,120 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     setFileData({});
   };
 
+  // Function to persist form message directly to chat storage
+  const persistFormToChat = async (finalFormName: string, chatId: string) => {
+    try {
+      // Format form data into a readable message
+      let formText = `📋 ${finalFormName} Submitted:\n\n`;
+      Object.keys(formData || {}).forEach(key => {
+        const value = formData[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          const fieldName = key
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/_/g, ' ')
+            .replace(/^./, str => str.toUpperCase());
+          formText += `${fieldName}: ${value}\n`;
+        }
+      });
+
+      // Build attachments array
+      const attachments: Array<{ name: string; uri: string; type: string }> = [];
+      if (fileData && Object.keys(fileData).length > 0) {
+        Object.keys(fileData).forEach(fieldId => {
+          const file = fileData[fieldId];
+          if (file && file.uri) {
+            attachments.push({
+              name: file.name || 'Uploaded File',
+              uri: file.uri,
+              type: file.mimeType || 'file'
+            });
+          }
+        });
+      }
+
+      // Create the message object
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const formMessage = {
+        id: Date.now().toString(),
+        text: formText.trim(),
+        timestamp: timestamp,
+        isBot: false,
+        delivered: true,
+        read: true,
+        attachments: attachments.length ? attachments : undefined,
+      };
+
+      // Load existing messages
+      const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
+      const messages = savedMessages ? JSON.parse(savedMessages) : [];
+      
+      // Add new form message
+      const updatedMessages = [...messages, formMessage];
+      await AsyncStorage.setItem(`messages_${chatId}`, JSON.stringify(updatedMessages));
+
+      // Update chat list last message
+      const storedChats = await AsyncStorage.getItem('chats');
+      if (storedChats) {
+        const chats = JSON.parse(storedChats);
+        const updatedChats = chats.map((chat: any) => 
+          chat.id === chatId 
+            ? { ...chat, lastMessage: `📋 ${finalFormName} submitted`, timestamp: timestamp }
+            : chat
+        );
+        await AsyncStorage.setItem('chats', JSON.stringify(updatedChats));
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error persisting form to chat:', error);
+      return false;
+    }
+  };
+
   const handleGoHome = () => {
     setShowSubmitSuccessModal(false);
+    // Navigate to the main WhatsApp chat list screen
+    navigation.navigate('Chat');
+  };
+
+  const handleViewInChat = () => {
+    setShowSubmitSuccessModal(false);
     if (chatId && chatName) {
-      // Reset navigation stack and go back to chat with form data
-      navigation.reset({
-        index: 0,
-        routes: [
-          {
-            name: 'ChatConversation',
-            params: {
-              chatId: chatId,
-              chatName: chatName,
-              formData: formData,
-              fileData: fileData,
-              formType: templateName || 'Form',
-            }
-          }
-        ],
+      navigation.navigate('ChatConversation', {
+        chatId: chatId,
+        chatName: chatName,
       });
-    } else {
-      // If no chat context, go to home
-      navigation.navigate('Home');
     }
+  };
+
+  const handleSendToChat = () => {
+    setShowSubmitSuccessModal(false);
+    // Navigate to contact selection with form data
+    navigation.navigate('SelectContact', {
+      forwardData: [{
+        id: Date.now().toString(),
+        type: customConfig ? 'Custom Form' : (templateName as 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form') || 'Custom Form',
+        templateName: customFormName || templateName || 'Form',
+        submittedAt: new Date().toLocaleString('en-US', {
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        }),
+        data: { ...formData },
+        uploadedFiles: Object.keys(fileData).length > 0 
+          ? Object.keys(fileData).map(fieldId => ({
+              name: fileData[fieldId].name || 'Uploaded File',
+              type: fileData[fieldId].mimeType || 'file',
+              uri: fileData[fieldId].uri || ''
+            }))
+          : undefined,
+      }],
+      fromForm: true
+    });
   };
 
   const handleSaveTemplate = () => {
@@ -376,7 +517,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     setShowSaveModal(true);
   };
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     if (templateNameInput.trim()) {
       const newTemplate = {
         id: Date.now().toString(),
@@ -385,7 +526,15 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         data: { ...formData }
       };
       
-      setSavedTemplates((prev: any) => [...prev, newTemplate]);
+      const updatedTemplates = [...savedTemplates, newTemplate];
+      setSavedTemplates(updatedTemplates);
+      
+      // Save to AsyncStorage
+      try {
+        await AsyncStorage.setItem(`saved-templates-${templateId}`, JSON.stringify(updatedTemplates));
+      } catch (error) {
+        console.error('Error saving template:', error);
+      }
       
       // Show success toast
       setToastTitle('Template Saved!');
@@ -587,21 +736,33 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Custom Toast Notification */}
-      {showToast && (
-        <View style={styles.toastContainer}>
-          <View style={styles.toast}>
-            <Text style={styles.toastTitle}>{toastTitle}</Text>
-            <Text style={styles.toastMessage}>{toastMessage}</Text>
-          </View>
-        </View>
-      )}
-      
-      <ScrollView 
-        style={styles.scrollView} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        enabled={true}
       >
+        {/* Custom Toast Notification */}
+        {showToast && (
+          <View style={styles.toastContainer}>
+            <View style={styles.toast}>
+              <Text style={styles.toastTitle}>{toastTitle}</Text>
+              <Text style={styles.toastMessage}>{toastMessage}</Text>
+            </View>
+          </View>
+        )}
+        
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(300, keyboardHeight + 50) }
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>{formTitle}</Text>
@@ -653,10 +814,17 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
                             {
                               text: 'Delete',
                               style: 'destructive',
-                              onPress: () => {
-                                setSavedTemplates((prev: any) => 
-                                  prev.filter((t: any) => t.id !== template.id)
-                                );
+                              onPress: async () => {
+                                const updatedTemplates = savedTemplates.filter((t: any) => t.id !== template.id);
+                                setSavedTemplates(updatedTemplates);
+                                
+                                // Update AsyncStorage
+                                try {
+                                  await AsyncStorage.setItem(`saved-templates-${templateId}`, JSON.stringify(updatedTemplates));
+                                } catch (error) {
+                                  console.error('Error deleting template:', error);
+                                }
+                                
                                 setToastTitle('Template Deleted!');
                                 setToastMessage(`Template "${template.name}" has been deleted.`);
                                 setShowToast(true);
@@ -690,12 +858,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
           <TouchableOpacity 
             style={styles.backButton} 
             onPress={() => {
-              if (chatId && chatName) {
-                // Always return to Forms Home, preserving chat context if provided
-                navigation.navigate('Home', { chatId, chatName });
-              } else {
-                navigation.navigate('Home');
-              }
+              // Navigate back to the previous screen in the navigation stack
+              navigation.goBack();
             }}
             activeOpacity={0.7}
           >
@@ -834,10 +998,49 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
             
             <Text style={styles.successTitle}>Form Submitted!</Text>
             <Text style={styles.successMessage}>
-              Thank you! Your customer form has been sent successfully. You will receive a confirmation message soon.
+              Thank you! Your form has been submitted successfully and saved to your dashboard.
+              {chatId && ' The form has been added to your chat conversation.'}
             </Text>
             
             <View style={styles.successButtons}>
+              {chatId && chatName ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.homeButton}
+                    onPress={handleViewInChat}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.homeButtonText}>View in Chat</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.submitAnotherButton}
+                    onPress={handleSubmitAnother}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.submitAnotherButtonText}>Submit Another</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.homeButton}
+                    onPress={handleSendToChat}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.homeButtonText}>Send to Chat</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.submitAnotherButton}
+                    onPress={handleSubmitAnother}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.submitAnotherButtonText}>Submit Another</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              
               <TouchableOpacity
                 style={styles.homeButton}
                 onPress={handleGoHome}
@@ -845,18 +1048,11 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
               >
                 <Text style={styles.homeButtonText}>Home</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.submitAnotherButton}
-                onPress={handleSubmitAnother}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.submitAnotherButtonText}>Submit Another</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -866,11 +1062,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 120,
+    flexGrow: 1,
   },
   header: {
     paddingHorizontal: 24,
@@ -1331,13 +1531,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   successButtons: {
-    flexDirection: 'row',
-    gap: 16,
+    flexDirection: 'column',
+    gap: 12,
     width: '100%',
-    marginTop: 8,
+    marginTop: 16,
   },
   homeButton: {
-    flex: 1,
+    width: '100%',
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -1361,7 +1561,7 @@ const styles = StyleSheet.create({
     color: '#495057',
   },
   submitAnotherButton: {
-    flex: 1,
+    width: '100%',
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 12,
