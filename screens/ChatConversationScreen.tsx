@@ -201,11 +201,20 @@ const ChatConversationScreen = ({ route }: any) => {
   const loadMessages = async () => {
     try {
       const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
+      console.log('DEBUG loadMessages - raw saved messages:', savedMessages);
       if (savedMessages) {
         const parsedMessages = JSON.parse(savedMessages);
         console.log('DEBUG loadMessages - loaded messages for chat', chatId, ':', parsedMessages);
+        console.log('DEBUG loadMessages - total message count:', parsedMessages.length);
         // Log any messages with attachments
         parsedMessages.forEach((msg: Message, index: number) => {
+          console.log(`DEBUG loadMessages - Message ${index}:`, {
+            id: msg.id,
+            textLength: msg.text?.length || 0,
+            textPreview: msg.text?.substring(0, 50) + '...',
+            hasAttachments: !!msg.attachments,
+            attachmentsCount: msg.attachments?.length || 0
+          });
           if (msg.attachments && msg.attachments.length > 0) {
             console.log(`DEBUG loadMessages - Message ${index} has attachments:`, msg.attachments);
           }
@@ -213,6 +222,7 @@ const ChatConversationScreen = ({ route }: any) => {
         setMessages(parsedMessages);
       } else {
         // Load default messages for first time
+        console.log('DEBUG loadMessages - no saved messages, loading defaults');
         const defaultMessages = getMessagesForChat(chatId);
         setMessages(defaultMessages);
         await AsyncStorage.setItem(`messages_${chatId}`, JSON.stringify(defaultMessages));
@@ -640,7 +650,13 @@ const ChatConversationScreen = ({ route }: any) => {
     setActionSheetMessage(null);
   };
 
-  const renderMessage = ({ item }: { item: Message }) => (
+  const renderMessage = ({ item }: { item: Message }) => {
+    console.log('DEBUG renderMessage - rendering message:', item.id, 'text length:', item.text?.length, 'has attachments:', !!item.attachments, 'attachments count:', item.attachments?.length || 0);
+    if (item.attachments && item.attachments.length > 0) {
+      console.log('DEBUG renderMessage - message attachments:', item.attachments);
+    }
+    
+    return (
     <Pressable onLongPress={() => onLongPressMessage(item)} style={[
       styles.messageContainer,
       item.isBot ? styles.botMessage : styles.userMessage,
@@ -676,14 +692,16 @@ const ChatConversationScreen = ({ route }: any) => {
         </View>
       ) : (
         <>
-          {!!item.text && (
+          {item.text && item.text.trim().length > 0 ? (
             <Text style={[
               styles.messageText,
               item.isLink && styles.linkText
             ]}>
               {item.text}
             </Text>
-          )}
+          ) : item.attachments && item.attachments.length > 0 ? (
+            <Text style={styles.messageText}>📎 {item.attachments.length} attachment{item.attachments.length > 1 ? 's' : ''}</Text>
+          ) : null}
           {item.attachments && item.attachments.length > 0 && (
             <View style={styles.attachmentsContainer}>
               {item.attachments.map((attachment, index) => (
@@ -710,7 +728,15 @@ const ChatConversationScreen = ({ route }: any) => {
                         source={{ uri: attachment.uri }} 
                         style={styles.attachmentThumbnail}
                         resizeMode="cover"
-                        onError={() => console.log('Image load error for:', attachment.uri)}
+                        onError={(error) => {
+                          console.log('Image load error for:', attachment.uri, error.nativeEvent.error);
+                        }}
+                        onLoadStart={() => {
+                          console.log('Started loading image:', attachment.name);
+                        }}
+                        onLoadEnd={() => {
+                          console.log('Finished loading image:', attachment.name);
+                        }}
                       />
                       <View style={styles.attachmentImageOverlay}>
                         <Ionicons name="expand" size={16} color="#fff" />
@@ -753,7 +779,8 @@ const ChatConversationScreen = ({ route }: any) => {
         )}
       </View>
     </Pressable>
-  );
+    );
+  };
 
   const handleQuickAction = (action: string) => {
     console.log(`${action} pressed`);

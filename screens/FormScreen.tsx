@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, Linking, Text, TextInput, TouchableOpacity, Platform, Modal, KeyboardAvoidingView, Keyboard, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -12,7 +12,6 @@ import { RootStackParamList, FormField } from '../types/navigation';
 import LocationPicker from '../components/LocationPicker';
 import { getFormConfig } from '../components/forms';
 import { useFormContext } from '../context/FormContext';
-
 type FormScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Form'>;
 type FormScreenRouteProp = RouteProp<RootStackParamList, 'Form'>;
 
@@ -45,6 +44,7 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
 
   // Keyboard listeners
   useEffect(() => {
@@ -195,32 +195,12 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
+        multiple: false,
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedFile = result.assets[0];
-        
-        // Validate file size (10MB limit)
-        if (selectedFile.size && selectedFile.size > 10 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Please select a file smaller than 10MB.');
-          return;
-        }
-        
-        console.log('File selected:', {
-          name: selectedFile.name,
-          uri: selectedFile.uri,
-          type: selectedFile.mimeType,
-          size: selectedFile.size
-        });
-        
-        setFileData(prev => {
-          const updated = { ...prev, [fieldId]: selectedFile };
-          console.log('Updated fileData state:', updated);
-          return updated;
-        });
-        
-        // Show success feedback
-        Alert.alert('File Selected', `${selectedFile.name} has been selected successfully.`);
+        setFileData(prev => ({ ...prev, [fieldId]: selectedFile }));
       }
     } catch (err) {
       console.error('File selection error:', err);
@@ -233,10 +213,17 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
       .filter(field => field.required && field.type !== 'file' && !formData[field.id])
       .map(field => field.label);
 
-    if (missingFields.length > 0) {
+    // Check for required file fields
+    const missingFiles = fields
+      .filter(field => field.required && field.type === 'file' && !fileData[field.id])
+      .map(field => field.label);
+
+    const allMissingFields = [...missingFields, ...missingFiles];
+
+    if (allMissingFields.length > 0) {
       Alert.alert(
         'Missing Required Fields',
-        `Please fill in the following fields:\n\n• ${missingFields.join('\n• ')}`,
+        `Please complete the following fields:\n\n• ${allMissingFields.join('\n• ')}`,
         [{ text: 'OK', style: 'default' }]
       );
       return false;
@@ -317,20 +304,31 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     setIsSubmitting(true);
     
     try {
-      // DEBUG: Log file data before processing
-      console.log('DEBUG performSubmit - fileData:', fileData);
-      console.log('DEBUG performSubmit - fileData keys:', Object.keys(fileData || {}));
-      
       // Create uploaded files array if there are any files
       const uploadedFiles = Object.keys(fileData).length > 0 
-        ? Object.keys(fileData).map(fieldId => ({
-            name: fileData[fieldId].name || 'Uploaded File',
-            type: fileData[fieldId].mimeType || 'file',
-            uri: fileData[fieldId].uri || ''
-          }))
+        ? Object.keys(fileData).map(fieldId => {
+            const file = fileData[fieldId];
+            let mimeType = file.mimeType;
+            
+            // If no MIME type, infer from filename
+            if (!mimeType && file.name) {
+              const name = file.name.toLowerCase();
+              if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+              else if (name.endsWith('.png')) mimeType = 'image/png';
+              else if (name.endsWith('.gif')) mimeType = 'image/gif';
+              else if (name.endsWith('.webp')) mimeType = 'image/webp';
+              else mimeType = 'file';
+            }
+            
+            console.log('DEBUG: File upload - name:', file.name, 'mimeType:', mimeType, 'uri:', file.uri);
+            
+            return {
+              name: file.name || 'Uploaded File',
+              type: mimeType || 'file',
+              uri: file.uri || ''
+            };
+          })
         : undefined;
-        
-      console.log('DEBUG performSubmit - uploadedFiles:', uploadedFiles);
 
       // Determine form type based on templateId and customConfig
       let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
@@ -399,8 +397,6 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleSubmitAnother = () => {
     setShowSubmitSuccessModal(false);
-    // Clear form data for new submission - but keep a backup of files for debugging
-    console.log('DEBUG: Clearing form data. Current fileData:', fileData);
     setFormData({});
     setFileData({});
   };
@@ -421,27 +417,33 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       });
 
-      // Build attachments array - DEBUG VERSION
+      // Build attachments array
       const attachments: Array<{ name: string; uri: string; type: string }> = [];
-      console.log('DEBUG persistFormToChat - fileData:', fileData);
-      console.log('DEBUG persistFormToChat - fileData keys:', Object.keys(fileData || {}));
       
       if (fileData && Object.keys(fileData).length > 0) {
         Object.keys(fileData).forEach(fieldId => {
           const file = fileData[fieldId];
-          console.log('DEBUG persistFormToChat - processing file:', fieldId, file);
           if (file && file.uri) {
-            const attachment = {
+            let mimeType = file.mimeType;
+            
+            // If no MIME type, infer from filename
+            if (!mimeType && file.name) {
+              const name = file.name.toLowerCase();
+              if (name.endsWith('.jpg') || name.endsWith('.jpeg')) mimeType = 'image/jpeg';
+              else if (name.endsWith('.png')) mimeType = 'image/png';
+              else if (name.endsWith('.gif')) mimeType = 'image/gif';
+              else if (name.endsWith('.webp')) mimeType = 'image/webp';
+              else mimeType = 'file';
+            }
+            
+            attachments.push({
               name: file.name || 'Uploaded File',
               uri: file.uri,
-              type: file.mimeType || 'file'
-            };
-            console.log('DEBUG persistFormToChat - adding attachment:', attachment);
-            attachments.push(attachment);
+              type: mimeType || 'file'
+            });
           }
         });
       }
-      console.log('DEBUG persistFormToChat - final attachments:', attachments);
 
       // Create the message object
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -454,8 +456,6 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         read: true,
         attachments: attachments.length ? attachments : undefined,
       };
-      
-      console.log('DEBUG persistFormToChat - final message object:', formMessage);
 
       // Load existing messages
       const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
@@ -520,9 +520,9 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         data: { ...formData },
         uploadedFiles: Object.keys(fileData).length > 0 
           ? Object.keys(fileData).map(fieldId => ({
-              name: fileData[fieldId].name || 'Uploaded File',
-              type: fileData[fieldId].mimeType || 'file',
-              uri: fileData[fieldId].uri || ''
+              name: fileData[fieldId].name,
+              type: fileData[fieldId].mimeType,
+              uri: fileData[fieldId].uri
             }))
           : undefined,
       }],
@@ -662,33 +662,27 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         );
 
       case 'file':
-        const hasFile = fileData[field.id];
         return (
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TouchableOpacity 
               style={[
                 styles.fileUploadButton,
-                hasFile && styles.fileUploadButtonSelected
+                fileData[field.id] && styles.fileUploadButtonSelected
               ]}
               onPress={() => handleFileSelect(field.id)}
             >
               <Ionicons 
-                name={hasFile ? "checkmark-circle" : "cloud-upload-outline"} 
+                name={fileData[field.id] ? "checkmark-circle" : "cloud-upload-outline"} 
                 size={24} 
-                color={hasFile ? "#10b981" : "#9ca3af"} 
+                color={fileData[field.id] ? "#10b981" : "#9ca3af"} 
               />
               <Text style={[
                 styles.fileUploadText,
-                hasFile && styles.fileUploadTextSelected
+                fileData[field.id] && styles.fileUploadTextSelected
               ]}>
-                {hasFile ? hasFile.name : field.placeholder}
+                {fileData[field.id] ? fileData[field.id].name : field.placeholder}
               </Text>
-              {hasFile ? (
-                <Text style={styles.fileSelectedText}>✓ File selected - Tap to change</Text>
-              ) : (
-                <Text style={styles.fileFormatText}>JPG, PNG, PDF, DOCX formats, up to 10 MB</Text>
-              )}
             </TouchableOpacity>
           </View>
         );
@@ -1641,6 +1635,53 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  // Image preview styles
+  imagePreviewContainer: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f3f4f6',
+  },
+  imageChangeButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  imageChangeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  fileSelectedInfo: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  fileSizeText: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  // Loading states
+  fileUploadButtonLoading: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+  },
+  fileUploadTextLoading: {
+    color: '#f59e0b',
+    fontStyle: 'italic',
   },
 });
 

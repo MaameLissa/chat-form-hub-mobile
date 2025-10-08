@@ -1,67 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, FlatList, Alert, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, FlatList, Alert, TouchableOpacity, Image, Linking } from 'react-native';
 import { Card, Title, Paragraph, Text, Chip, Divider } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Ionicons } from '@expo/vector-icons';
 import { SubmittedForm } from '../types/navigation';
+import { useFormContext } from '../context/FormContext';
 
 const SubmittedFormsScreen: React.FC = () => {
-  const [submittedForms, setSubmittedForms] = useState<SubmittedForm[]>([
-    {
-      id: '1',
-      type: 'Customer Details',
-      templateName: 'Customer Details',
-      data: {
-        name: 'John Smith',
-        phone: '+1 (555) 123-4567',
-        email: 'john@example.com',
-        items: 'iPhone 15 Pro Max, AirPods Pro',
-        delivery_address: '123 Main St, New York, NY 10001',
-        special_instructions: 'Please call before delivery'
-      },
-      submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() // 2 days ago
-    },
-    {
-      id: '2',
-      type: 'Service Booking',
-      templateName: 'Service Booking',
-      data: {
-        name: 'Sarah Johnson',
-        phone: '+1 (555) 987-6543',
-        service_type: 'Installation',
-        preferred_date: '12/20/2024',
-        description: 'Need to install new security system'
-      },
-      submittedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() // 1 day ago
-    },
-    {
-      id: '3',
-      type: 'Feedback',
-      templateName: 'Feedback Form',
-      data: {
-        name: 'Michael Chen',
-        email: 'michael@example.com',
-        rating: 'Excellent',
-        feedback: 'Great service and very professional team!',
-        suggestions: 'Maybe add more payment options'
-      },
-      submittedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() // 6 hours ago
-    },
-    {
-      id: '4',
-      type: 'Contact',
-      templateName: 'Contact Us',
-      data: {
-        name: 'Emma Davis',
-        phone: '+1 (555) 321-0987',
-        email: 'emma@example.com',
-        subject: 'Product Inquiry',
-        message: 'I would like to know more about your latest products and pricing.'
-      },
-      submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
-    }
-  ]);
+  const { submittedForms, deleteSubmittedForm } = useFormContext();
 
   const formatTimestamp = (submittedAt: string): string => {
     const now = new Date();
@@ -117,7 +64,7 @@ const SubmittedFormsScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setSubmittedForms(prev => prev.filter(form => form.id !== formId));
+            deleteSubmittedForm(formId);
           },
         },
       ]
@@ -170,6 +117,78 @@ const SubmittedFormsScreen: React.FC = () => {
             </View>
           ))}
         </View>
+
+        {/* Display uploaded files if any */}
+        {item.uploadedFiles && item.uploadedFiles.length > 0 && (
+          <>
+            <Divider style={styles.divider} />
+            <View style={styles.filesSection}>
+              <Text style={styles.filesSectionTitle}>Attached Files ({item.uploadedFiles.length})</Text>
+              <View style={styles.filesContainer}>
+                {item.uploadedFiles.map((file, fileIndex) => (
+                  <TouchableOpacity
+                    key={fileIndex}
+                    style={styles.fileItem}
+                    onPress={() => {
+                      if (file.type.startsWith('image/') && file.uri) {
+                        Alert.alert(
+                          'View Image',
+                          `Would you like to view ${file.name}?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { 
+                              text: 'View', 
+                              onPress: () => {
+                                if (file.uri) {
+                                  Linking.openURL(file.uri).catch(() => {
+                                    Alert.alert('Error', 'Could not open image');
+                                  });
+                                }
+                              }
+                            }
+                          ]
+                        );
+                      } else if (file.uri) {
+                        Linking.openURL(file.uri).catch(() => {
+                          Alert.alert('Error', `Cannot open ${file.name}`);
+                        });
+                      }
+                    }}
+                  >
+                    {file.type.startsWith('image/') && file.uri ? (
+                      <View style={styles.imageFileItem}>
+                        <Image
+                          source={{ uri: file.uri }}
+                          style={styles.fileThumbnail}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.imageFileOverlay}>
+                          <Ionicons name="eye" size={16} color="#fff" />
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.documentFileItem}>
+                        <Ionicons 
+                          name="document-text" 
+                          size={24} 
+                          color="#007AFF" 
+                        />
+                      </View>
+                    )}
+                    <View style={styles.fileInfo}>
+                      <Text style={styles.fileName} numberOfLines={2}>
+                        {file.name}
+                      </Text>
+                      <Text style={styles.fileType}>
+                        {file.type.split('/')[1]?.toUpperCase() || 'FILE'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
       </Card.Content>
     </Card>
   );
@@ -312,6 +331,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#999',
     lineHeight: 22,
+  },
+  // File display styles
+  filesSection: {
+    marginTop: 12,
+  },
+  filesSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#075E54',
+    marginBottom: 12,
+  },
+  filesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  fileItem: {
+    width: '48%',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    alignItems: 'center',
+  },
+  imageFileItem: {
+    width: '100%',
+    height: 80,
+    position: 'relative',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  fileThumbnail: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f0f0f0',
+  },
+  imageFileOverlay: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  documentFileItem: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fileInfo: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  fileName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  fileType: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 
