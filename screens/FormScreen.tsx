@@ -206,7 +206,21 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
           return;
         }
         
-        setFileData(prev => ({ ...prev, [fieldId]: selectedFile }));
+        console.log('File selected:', {
+          name: selectedFile.name,
+          uri: selectedFile.uri,
+          type: selectedFile.mimeType,
+          size: selectedFile.size
+        });
+        
+        setFileData(prev => {
+          const updated = { ...prev, [fieldId]: selectedFile };
+          console.log('Updated fileData state:', updated);
+          return updated;
+        });
+        
+        // Show success feedback
+        Alert.alert('File Selected', `${selectedFile.name} has been selected successfully.`);
       }
     } catch (err) {
       console.error('File selection error:', err);
@@ -303,6 +317,10 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
     setIsSubmitting(true);
     
     try {
+      // DEBUG: Log file data before processing
+      console.log('DEBUG performSubmit - fileData:', fileData);
+      console.log('DEBUG performSubmit - fileData keys:', Object.keys(fileData || {}));
+      
       // Create uploaded files array if there are any files
       const uploadedFiles = Object.keys(fileData).length > 0 
         ? Object.keys(fileData).map(fieldId => ({
@@ -311,6 +329,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
             uri: fileData[fieldId].uri || ''
           }))
         : undefined;
+        
+      console.log('DEBUG performSubmit - uploadedFiles:', uploadedFiles);
 
       // Determine form type based on templateId and customConfig
       let formType: 'Customer Details' | 'Service Booking' | 'Feedback' | 'Contact' | 'Custom Form';
@@ -379,7 +399,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const handleSubmitAnother = () => {
     setShowSubmitSuccessModal(false);
-    // Clear form data for new submission
+    // Clear form data for new submission - but keep a backup of files for debugging
+    console.log('DEBUG: Clearing form data. Current fileData:', fileData);
     setFormData({});
     setFileData({});
   };
@@ -400,20 +421,27 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         }
       });
 
-      // Build attachments array
+      // Build attachments array - DEBUG VERSION
       const attachments: Array<{ name: string; uri: string; type: string }> = [];
+      console.log('DEBUG persistFormToChat - fileData:', fileData);
+      console.log('DEBUG persistFormToChat - fileData keys:', Object.keys(fileData || {}));
+      
       if (fileData && Object.keys(fileData).length > 0) {
         Object.keys(fileData).forEach(fieldId => {
           const file = fileData[fieldId];
+          console.log('DEBUG persistFormToChat - processing file:', fieldId, file);
           if (file && file.uri) {
-            attachments.push({
+            const attachment = {
               name: file.name || 'Uploaded File',
               uri: file.uri,
               type: file.mimeType || 'file'
-            });
+            };
+            console.log('DEBUG persistFormToChat - adding attachment:', attachment);
+            attachments.push(attachment);
           }
         });
       }
+      console.log('DEBUG persistFormToChat - final attachments:', attachments);
 
       // Create the message object
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -426,6 +454,8 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         read: true,
         attachments: attachments.length ? attachments : undefined,
       };
+      
+      console.log('DEBUG persistFormToChat - final message object:', formMessage);
 
       // Load existing messages
       const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
@@ -632,18 +662,33 @@ const FormScreen: React.FC<Props> = ({ navigation, route }) => {
         );
 
       case 'file':
+        const hasFile = fileData[field.id];
         return (
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{field.label}</Text>
             <TouchableOpacity 
-              style={styles.fileUploadButton}
+              style={[
+                styles.fileUploadButton,
+                hasFile && styles.fileUploadButtonSelected
+              ]}
               onPress={() => handleFileSelect(field.id)}
             >
-              <Ionicons name="cloud-upload-outline" size={24} color="#9ca3af" />
-              <Text style={styles.fileUploadText}>
-                {fileData[field.id] ? fileData[field.id].name : field.placeholder}
+              <Ionicons 
+                name={hasFile ? "checkmark-circle" : "cloud-upload-outline"} 
+                size={24} 
+                color={hasFile ? "#10b981" : "#9ca3af"} 
+              />
+              <Text style={[
+                styles.fileUploadText,
+                hasFile && styles.fileUploadTextSelected
+              ]}>
+                {hasFile ? hasFile.name : field.placeholder}
               </Text>
-              <Text style={styles.fileFormatText}>JPG, PNG, PDF, DOCX formats, up to 10 MB</Text>
+              {hasFile ? (
+                <Text style={styles.fileSelectedText}>✓ File selected - Tap to change</Text>
+              ) : (
+                <Text style={styles.fileFormatText}>JPG, PNG, PDF, DOCX formats, up to 10 MB</Text>
+              )}
             </TouchableOpacity>
           </View>
         );
@@ -1224,6 +1269,21 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     textAlign: 'center',
     marginTop: 4,
+  },
+  fileUploadButtonSelected: {
+    borderColor: '#10b981',
+    backgroundColor: '#f0fdf4',
+  },
+  fileUploadTextSelected: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  fileSelectedText: {
+    fontSize: 12,
+    color: '#10b981',
+    textAlign: 'center',
+    marginTop: 4,
+    fontWeight: '600',
   },
   dropdownButton: {
     borderWidth: 1,

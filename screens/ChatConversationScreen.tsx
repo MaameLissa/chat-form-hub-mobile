@@ -155,6 +155,14 @@ const ChatConversationScreen = ({ route }: any) => {
     loadMessages();
   }, [chatId]);
 
+  // Add focus listener to reload messages when screen becomes active
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadMessages();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   useEffect(() => {
     // Only add form message if it came from route params and wasn't already persisted
     if (formData && formType && !messages.some(msg => 
@@ -194,7 +202,15 @@ const ChatConversationScreen = ({ route }: any) => {
     try {
       const savedMessages = await AsyncStorage.getItem(`messages_${chatId}`);
       if (savedMessages) {
-        setMessages(JSON.parse(savedMessages));
+        const parsedMessages = JSON.parse(savedMessages);
+        console.log('DEBUG loadMessages - loaded messages for chat', chatId, ':', parsedMessages);
+        // Log any messages with attachments
+        parsedMessages.forEach((msg: Message, index: number) => {
+          if (msg.attachments && msg.attachments.length > 0) {
+            console.log(`DEBUG loadMessages - Message ${index} has attachments:`, msg.attachments);
+          }
+        });
+        setMessages(parsedMessages);
       } else {
         // Load default messages for first time
         const defaultMessages = getMessagesForChat(chatId);
@@ -209,6 +225,13 @@ const ChatConversationScreen = ({ route }: any) => {
 
   const saveMessages = async (newMessages: Message[]) => {
     try {
+      console.log('DEBUG saveMessages - saving messages for chat', chatId, ':', newMessages);
+      // Log any messages with attachments being saved
+      newMessages.forEach((msg: Message, index: number) => {
+        if (msg.attachments && msg.attachments.length > 0) {
+          console.log(`DEBUG saveMessages - Message ${index} being saved with attachments:`, msg.attachments);
+        }
+      });
       await AsyncStorage.setItem(`messages_${chatId}`, JSON.stringify(newMessages));
     } catch (error) {
       console.log('Error saving messages:', error);
@@ -243,32 +266,43 @@ const ChatConversationScreen = ({ route }: any) => {
       }
     });
 
-    // Build attachments array (supports array or object input)
+    // Build attachments array (supports array or object input) - DEBUG VERSION
+    console.log('DEBUG ChatConversationScreen addFormMessage - fileData:', fileData);
+    console.log('DEBUG ChatConversationScreen addFormMessage - fileData type:', typeof fileData);
     const attachments: Array<{ name: string; uri: string; type: string }> = [];
     if (fileData) {
       if (Array.isArray(fileData)) {
-        fileData.forEach(f => {
+        console.log('DEBUG ChatConversationScreen - processing array fileData');
+        fileData.forEach((f, index) => {
+          console.log('DEBUG ChatConversationScreen - array item', index, ':', f);
           if (f && (f.uri || f.url)) {
-            attachments.push({
+            const attachment = {
               name: f.name || 'file',
               uri: f.uri || f.url || '',
               type: f.type || f.mimeType || 'file'
-            });
+            };
+            console.log('DEBUG ChatConversationScreen - adding array attachment:', attachment);
+            attachments.push(attachment);
           }
         });
       } else if (typeof fileData === 'object') {
+        console.log('DEBUG ChatConversationScreen - processing object fileData');
         Object.keys(fileData).forEach(key => {
           const f = fileData[key];
-            if (f && (f.uri || f.url)) {
-              attachments.push({
-                name: f.name || key,
-                uri: f.uri || f.url || '',
-                type: f.type || f.mimeType || 'file'
-              });
-            }
+          console.log('DEBUG ChatConversationScreen - object key', key, ':', f);
+          if (f && (f.uri || f.url)) {
+            const attachment = {
+              name: f.name || key,
+              uri: f.uri || f.url || '',
+              type: f.type || f.mimeType || 'file'
+            };
+            console.log('DEBUG ChatConversationScreen - adding object attachment:', attachment);
+            attachments.push(attachment);
+          }
         });
       }
     }
+    console.log('DEBUG ChatConversationScreen - final attachments array:', attachments);
 
     // Do NOT set imageUri for form submissions; show all files as attachments below text
     const formMessage: Message = {
@@ -657,6 +691,7 @@ const ChatConversationScreen = ({ route }: any) => {
                   key={index}
                   style={styles.attachmentItem}
                   onPress={() => {
+                    console.log('DEBUG: Attachment pressed:', attachment);
                     if (attachment.type.startsWith('image/') && attachment.uri) {
                       console.log('Opening image:', attachment.uri);
                       setViewingImage(attachment.uri);
@@ -665,7 +700,7 @@ const ChatConversationScreen = ({ route }: any) => {
                         Alert.alert('Error', `Cannot open ${attachment.name}`);
                       });
                     } else {
-                      Alert.alert('Error', 'File not available');
+                      Alert.alert('Error', 'File not available - URI missing');
                     }
                   }}
                 >
@@ -675,6 +710,7 @@ const ChatConversationScreen = ({ route }: any) => {
                         source={{ uri: attachment.uri }} 
                         style={styles.attachmentThumbnail}
                         resizeMode="cover"
+                        onError={() => console.log('Image load error for:', attachment.uri)}
                       />
                       <View style={styles.attachmentImageOverlay}>
                         <Ionicons name="expand" size={16} color="#fff" />
@@ -682,13 +718,22 @@ const ChatConversationScreen = ({ route }: any) => {
                     </View>
                   ) : (
                     <Ionicons 
-                      name="document" 
+                      name={attachment.uri ? "document" : "alert-circle"} 
                       size={20} 
-                      color="#007AFF" 
+                      color={attachment.uri ? "#007AFF" : "#FF3B30"} 
                     />
                   )}
-                  <Text style={styles.attachmentName}>{attachment.name}</Text>
-                  <Ionicons name={attachment.type.startsWith('image/') ? 'eye' : 'download'} size={16} color="#007AFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.attachmentName}>{attachment.name}</Text>
+                    {!attachment.uri && (
+                      <Text style={styles.attachmentErrorText}>File not available</Text>
+                    )}
+                  </View>
+                  <Ionicons 
+                    name={attachment.type.startsWith('image/') ? 'eye' : 'download'} 
+                    size={16} 
+                    color={attachment.uri ? "#007AFF" : "#FF3B30"} 
+                  />
                 </TouchableOpacity>
               ))}
             </View>
@@ -1251,10 +1296,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   attachmentName: {
-    flex: 1,
     fontSize: 14,
     color: '#007AFF',
     textDecorationLine: 'underline',
+  },
+  attachmentErrorText: {
+    fontSize: 12,
+    color: '#FF3B30',
+    fontStyle: 'italic',
   },
   attachmentImageContainer: {
     position: 'relative',
